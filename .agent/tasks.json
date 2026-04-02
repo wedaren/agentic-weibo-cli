@@ -46,7 +46,7 @@
       "id": "task_004",
       "type": "coding",
       "title": "实现发微博、个人微博列表和转发信息查询命令",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_003"
       ],
@@ -57,7 +57,7 @@
       "id": "task_005",
       "type": "coding",
       "title": "补充 README、配置说明和 MVP 验收命令",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_004"
       ],

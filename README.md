@@ -1,240 +1,145 @@
-# Agentic Project Template
+# agentic-weibo-cli
 
-基于 Karpathy autoresearch 理念的 AI 自主开发模板。
+面向个人账号的本地单用户微博命令行工具，支持扫码登录指引、加载本地登录态、发布微博、查看个人微博列表，以及查询指定微博的转发信息。
 
-**核心思想：你只写想法，系统自动 research → 实现 → 验收 → 进化。**
+## 环境要求
 
----
+- Node.js `>=20`
+- npm
+- 本地可访问微博登录页与 `m.weibo.cn`
 
-## 快速开始
-
-### 方式一：VS Code Copilot（推荐）
-
-在 VS Code Chat 中直接运行，无需单独安装额外 CLI：
-
-```
-# 1. 初始化新项目（在 Chat 中输入）
-/init my-app "一个帮助用户管理任务的 Web 应用"
-
-# 2. 填写需求
-编辑 .agent/program.md — 写目标、约束、停止条件
-
-# 3. 启动
-/tick          # 全自动跑到 MVP
-/evolve        # MVP 完成后持续进化
-```
-
-> 提示词文件位于 `.github/prompts/`，自动出现在 Chat 的 `/` 命令列表中。
-
-### 方式二：Codex CLI（备选）
+## 安装与启动
 
 ```bash
-# 1. 初始化新项目
-bash init.sh my-app "一个帮助用户管理任务的 Web 应用"
-cd my-app
-
-# 2. 填写需求
-edit .agent/program.md   # 写目标、约束、停止条件
-
-# 3. 启动
-bash tick.sh             # 全自动跑到 MVP
-bash evolve.sh           # MVP 完成后持续进化
+npm install
+npm run help
 ```
 
----
+CLI 入口：
 
-## 文件结构
-
-```
-.github/
-  agents/
-    pm.agent.md          PM Agent（调研+决策）
-    coder.agent.md       Coder Agent（写代码）
-    validator.agent.md   Validator Agent（验收）
-    research.agent.md    Research Agent（搜索解法）
-    evolution.agent.md   Evolution Agent（拆解功能）
-  prompts/
-    tick.prompt.md       /tick   调度器（MVP 阶段）
-    evolve.prompt.md     /evolve 调度器（进化阶段）
-    init.prompt.md       /init   项目初始化
-
-.agent/                  文件系统消息总线（运行时生成）
-  program.md             唯一需求基准（你来写）
-  tasks.json             任务队列
-  state.json             全局状态
-  decisions.md           PM 决策日志
-  knowledge/             research 知识库
-  experiments/           迭代历史
-  inbox/                 需要介入时才有文件
+```bash
+npm run cli -- --help
 ```
 
----
+## 本地配置说明
 
-## 模板文件说明
+配置优先级：
 
-### 你需要填写的（2 个文件）
+1. 环境变量 `WEIBO_COOKIE` / `WEIBO_UID`
+2. 本地未提交文件 `.local/weibo-session.json`
 
-| 文件 | 填什么 |
-|---|---|
-| `.agent/program.md` | 项目目标、约束、MVP 停止条件 |
-| `.agent/tasks.json` | 具体任务列表（task_001 开始） |
+可用环境变量：
 
-task_000（技术调研）已经预置，不需要你填。
+- `WEIBO_COOKIE`：完整浏览器 Cookie 字符串，至少建议包含 `SUB`、`SUBP`、`SCF` 之一
+- `WEIBO_UID`：当前账号 UID，可选
+- `WEIBO_CLI_DATA_DIR`：本地配置目录，默认是仓库下的 `.local/`
+- `WEIBO_API_BASE_URL`：微博接口根地址，默认 `https://m.weibo.cn`
 
-### 系统自动维护的
-
-```
-.agent/state.json      运行状态
-.agent/decisions.md    PM 的技术决策
-.agent/knowledge/      research 积累的知识
-.agent/experiments/    每次迭代记录
-.agent/inbox/          需要你介入时才有文件
-```
-
----
-
-## 系统架构
-
-```
-你
- ↕ 只写 program.md
-调度层（tick.sh / evolve.sh）
- ↕ while true + 状态路由
-Agent 层（5 个独立 session）
- ├── PM Agent      research + 决策
- ├── Coder Agent   写代码 + 自评分
- ├── Validator     多维度验收
- ├── Research      失败时自动搜索解法   ← autoresearch 核心
- └── Evolution     模糊想法 → 可执行任务
- ↕
-Karpathy Loop
- 假设 → 执行 → 评估（量化分数）→ commit or restore attempt snapshot
- ↕
-文件系统（.agent/ 作为消息总线）
-```
-
----
-
-## Karpathy Loop 原理
-
-每个任务都在此循环内运行：
-
-```
-读历史记录 + knowledge
-  ↓
-形成假设（与上次有什么不同）
-  ↓
-写代码
-  ↓
-自评分（0-100，低于60自动拒绝）
-  ↓
-运行 acceptance_cmd
-  ↓
-pass → git commit
-fail → 恢复本轮快照 → Research Agent 搜索解法 → 重试
-  ↓
-3次失败 → 通知你介入
-```
-
-**关键：失败不是终点，而是触发 research 的信号。系统越跑越聪明。**
-
----
-
-## tasks.json 编写指南
+默认本地登录态文件示例：
 
 ```json
 {
-  "id": "task_001",
-  "type": "coding",
-  "title": "简短的任务描述",
-  "status": "blocked",
-  "depends_on": ["task_000"],
-  "acceptance": "人类可读的验收标准",
-  "acceptance_cmd": "bash -c '...命令... && echo PASS || echo FAIL: 原因'"
+  "cookie": "SUB=...; SUBP=...; SCF=...",
+  "uid": "1234567890",
+  "loginUrl": "https://passport.weibo.com/signin/login?entry=mweibo&r=https%3A%2F%2Fm.weibo.cn%2F",
+  "updatedAt": "2026-04-02T16:00:00.000Z"
 }
 ```
 
-**acceptance_cmd 关键规则：**
-- 必须能在 shell 中直接执行
-- 成功时必须输出以 `PASS` 开头的内容
-- 失败时输出 `FAIL: 原因`
+`.local/` 和 `.env` 已加入 `.gitignore`，不要把真实 Cookie 提交到仓库。
 
-**常用验收命令模式：**
+## 扫码登录
+
+先运行：
 
 ```bash
-# 文件存在
-test -f src/index.ts && echo PASS || echo 'FAIL: 文件不存在'
-
-# 编译通过
-npm run build 2>&1 | grep -c error | xargs test 0 -eq && echo PASS || echo 'FAIL: 编译错误'
-
-# 代码包含关键字
-grep -r 'functionName' src/ > /dev/null && echo PASS || echo 'FAIL: 函数未实现'
-
-# 多条件组合
-test -f src/api.ts && grep -r 'export' src/api.ts > /dev/null && echo PASS || echo 'FAIL: API 模块不完整'
+npm run cli -- login
 ```
 
----
+该命令会：
 
-## 进化功能
+- 在终端输出扫码登录指引
+- 渲染微博登录页二维码
+- 提示你在扫码成功后，把浏览器里的完整 Cookie 粘贴回终端
+- 把登录态写入 `.local/weibo-session.json`
 
-MVP 完成后，在 `.agent/program.md` 末尾追加：
+如果你已经有 Cookie，可以直接写入本地配置：
 
-```markdown
-- [ ] 你的功能想法（可以很模糊）
-- [ ] 另一个想法
-```
-
-然后在 VS Code Chat 输入 `/evolve`（或运行 `bash evolve.sh`），系统自动：
-1. 读取想法
-2. Research 行业最佳实践
-3. 拆解成具体任务
-4. Karpathy Loop 实现
-5. 完成后通知你，更新为 `[x]`
-
----
-
-## 需要你介入的唯一情况
-
-某任务连续失败 3 次，系统写入 `.agent/inbox/needs-you.md`。
-
-**VS Code Copilot：**
-```
-查看 .agent/inbox/needs-you.md 文件
-处理完后删除该文件，再重新运行 /tick 或 /evolve
-```
-
-**Codex CLI：**
 ```bash
-cat .agent/inbox/needs-you.md
-# 处理完后
-rm .agent/inbox/needs-you.md
-bash tick.sh  # 或 evolve.sh
+WEIBO_COOKIE='SUB=...; SUBP=...; SCF=...' WEIBO_UID='1234567890' npm run cli -- login --from-env
 ```
 
----
+或：
 
-## 适用场景
+```bash
+npm run cli -- login --cookie 'SUB=...; SUBP=...; SCF=...' --uid 1234567890 --no-prompt
+```
 
-✅ 适合：
-- 技术选型明确或可以调研的项目
-- 能写出可执行验收命令的功能
-- 模块相对独立、可以串行推进的项目
+## 命令示例
 
-⚠️ 不适合：
-- 需要实时人机交互决策的创意类工作
-- 验收标准完全主观（"做得好看"）
-- 强依赖外部实时数据的任务
+查看帮助：
 
----
+```bash
+npm run help
+```
 
-## 已知局限
+发布微博：
 
-| 局限 | 说明 |
-|---|---|
-| 验收自写自评 | agent 写的 acceptance_cmd 可能偏宽松 |
-| Codex CLI 配额/速率 | 密集调用时可能变慢或失败，需要调大 sleep 值并重试 |
-| knowledge 无验证 | Research Agent 的结论可能不准确 |
-| 串行执行 | 不支持并行，大型项目速度受限 |
-| 快照恢复较粗粒度 | 当前按任务尝试恢复工作区快照，不是细粒度文件级 merge |
+```bash
+npm run cli -- post --text "test from cli"
+```
+
+查看自己最近发布的微博：
+
+```bash
+npm run cli -- list --limit 5 --page 1
+```
+
+查询某条微博的转发：
+
+```bash
+npm run cli -- reposts --weibo-id 1234567890123456 --limit 20 --page 1
+```
+
+## 常见失败与排查
+
+- 未配置登录态：先执行 `npm run cli -- login`，或设置 `WEIBO_COOKIE`
+- Cookie 格式错误：应为完整请求头字符串，例如 `SUB=...; SUBP=...`
+- 登录态过期：重新运行 `login` 更新本地文件
+- 请求被风控或接口变化：CLI 会返回明确的 HTTP 错误或鉴权错误信息
+
+## MVP 验收命令
+
+构建与帮助：
+
+```bash
+npm run build
+npm run help
+```
+
+未登录时快速失败：
+
+```bash
+npm run cli -- post --text "test from cli"
+```
+
+配置好登录态后的联调命令：
+
+```bash
+npm run cli -- post --text "test from cli"
+npm run cli -- list --limit 5
+npm run cli -- reposts --weibo-id <id> --limit 20
+```
+
+任务验收命令：
+
+```bash
+grep -q '扫码登录' README.md && grep -q 'login' README.md && grep -q 'post' README.md && echo PASS || echo 'FAIL: README 缺少扫码登录或命令说明'
+```
+
+## 风险说明
+
+- 本项目依赖用户自己提供的微博登录态，不提供 OAuth 或多账号管理
+- Cookie 属于敏感凭据，只能保存在本地未提交文件或临时环境变量中
+- 微博页面结构、接口字段和风控策略可能变化，命令可能返回接口失败原因而不是稳定成功
+- `login` 当前提供的是本地扫码指引和登录态落盘流程，不会把二维码内容或 Cookie 上传到仓库
