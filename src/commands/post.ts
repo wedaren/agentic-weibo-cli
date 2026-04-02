@@ -1,16 +1,21 @@
-/** 职责：注册发微博命令，并在业务实现前先执行登录态预检查。 */
+/** 职责：注册发微博命令，并调用微博服务层执行发布。 */
 import { Command } from "commander";
 
-import { assertSessionConfigured } from "../auth/session.js";
-import { notImplemented } from "../output/messages.js";
+import { formatPostResult } from "../output/weibo.js";
+import { WeiboService } from "../services/weiboService.js";
+
+interface PostCommandOptions {
+  text: string;
+}
 
 export function registerPostCommand(program: Command): void {
   program
     .command("post")
     .description("发布一条微博")
     .requiredOption("--text <content>", "微博正文内容")
-    .action(async () => {
-      await assertSessionConfigured();
-      notImplemented("post", "后续任务将接入登录态校验与发微博服务。");
+    .action(async (options: PostCommandOptions) => {
+      const service = await WeiboService.createDefault();
+      const result = await service.postWeibo({ text: options.text });
+      process.stdout.write(formatPostResult(result));
     });
 }

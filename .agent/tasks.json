@@ -35,7 +35,7 @@
       "id": "task_003",
       "type": "coding",
       "title": "实现登录态加载校验和微博 API 客户端基础能力",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_002"
       ],
@@ -46,7 +46,7 @@
       "id": "task_004",
       "type": "coding",
       "title": "实现发微博、个人微博列表和转发信息查询命令",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_003"
       ],
