@@ -24,7 +24,7 @@
       "id": "task_002",
       "type": "coding",
       "title": "实现扫码登录流程与本地登录态持久化",
-      "status": "blocked",
+      "status": "pending",
       "depends_on": [
         "task_001"
       ],
