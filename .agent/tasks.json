@@ -29,7 +29,7 @@
         "task_001"
       ],
       "acceptance": "login 命令可执行；未登录时能展示二维码或登录提示；登录成功后能在本地生成可读取的登录态文件",
-      "acceptance_cmd": "npm run cli -- login --help >/dev/null 2>&1 && test -f src/commands/login.ts && echo PASS || echo 'FAIL: 扫码登录命令未实现'"
+      "acceptance_cmd": "npm run build >/dev/null 2>&1 && npm run cli -- login --help >/dev/null 2>&1 && node --input-type=module -e \"import('./dist/src/auth/browserLogin.js').then((m)=>m.findBrowserExecutable()).then(()=>process.exit(0)).catch(()=>process.exit(1))\" && test -f src/commands/login.ts && test -f src/auth/browserLogin.ts && echo PASS || echo 'FAIL: 浏览器扫码登录链路未实现'"
     },
     {
       "id": "task_003",
@@ -57,7 +57,7 @@
       "id": "task_005",
       "type": "coding",
       "title": "补充 README、配置说明和 MVP 验收命令",
-      "status": "pending",
+      "status": "done",
       "depends_on": [
         "task_004"
       ],

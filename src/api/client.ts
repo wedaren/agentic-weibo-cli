@@ -148,6 +148,7 @@ export class WeiboApiClient {
 
   private buildHeaders(extraHeaders: Record<string, string> | undefined): Headers {
     const headers = new Headers(extraHeaders);
+    const csrfToken = extractCookieValue(this.options.session.cookie, "XSRF-TOKEN") ?? extractCookieValue(this.options.session.cookie, "X-CSRF-TOKEN");
 
     if (!headers.has("accept")) {
       headers.set("accept", "application/json, text/plain, */*");
@@ -159,6 +160,14 @@ export class WeiboApiClient {
 
     if (!headers.has("user-agent")) {
       headers.set("user-agent", this.userAgent);
+    }
+
+    if (csrfToken && !headers.has("x-xsrf-token")) {
+      headers.set("x-xsrf-token", csrfToken);
+    }
+
+    if (csrfToken && !headers.has("x-csrf-token")) {
+      headers.set("x-csrf-token", csrfToken);
     }
 
     return headers;
@@ -198,4 +207,10 @@ function normalizeUid(uid: string | number | undefined): string | undefined {
   }
 
   return String(uid).trim() || undefined;
+}
+
+function extractCookieValue(cookieHeader: string, key: string): string | undefined {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${escapedKey}=([^;]+)`));
+  return match?.[1];
 }

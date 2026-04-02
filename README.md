@@ -1,6 +1,6 @@
 # agentic-weibo-cli
 
-面向个人账号的本地单用户微博命令行工具，支持扫码登录指引、加载本地登录态、发布微博、查看个人微博列表，以及查询指定微博的转发信息。
+面向个人账号的本地单用户微博命令行工具，支持本地浏览器扫码登录、加载本地登录态、发布微博、查看个人微博列表，以及查询指定微博的转发信息。
 
 ## 环境要求
 
@@ -41,7 +41,7 @@ npm run cli -- --help
 {
   "cookie": "SUB=...; SUBP=...; SCF=...",
   "uid": "1234567890",
-  "loginUrl": "https://passport.weibo.com/signin/login?entry=mweibo&r=https%3A%2F%2Fm.weibo.cn%2F",
+  "loginUrl": "https://passport.weibo.com/sso/signin?entry=wapsso&source=wapssowb&url=https%3A%2F%2Fweibo.com",
   "updatedAt": "2026-04-02T16:00:00.000Z"
 }
 ```
@@ -56,12 +56,18 @@ npm run cli -- --help
 npm run cli -- login
 ```
 
-该命令会：
+默认情况下，该命令会：
 
-- 在终端输出扫码登录指引
-- 渲染微博登录页二维码
-- 提示你在扫码成功后，把浏览器里的完整 Cookie 粘贴回终端
+- 自动打开本地 Chrome/Chromium 到微博登录页
+- 等待你在浏览器里扫码完成登录
+- 自动提取浏览器中的微博登录 cookie
 - 把登录态写入 `.local/weibo-session.json`
+
+检查浏览器自动化依赖是否可用：
+
+```bash
+npm run cli -- login --check-browser
+```
 
 如果你已经有 Cookie，可以直接写入本地配置：
 
@@ -69,10 +75,10 @@ npm run cli -- login
 WEIBO_COOKIE='SUB=...; SUBP=...; SCF=...' WEIBO_UID='1234567890' npm run cli -- login --from-env
 ```
 
-或：
+手动降级模式：
 
 ```bash
-npm run cli -- login --cookie 'SUB=...; SUBP=...; SCF=...' --uid 1234567890 --no-prompt
+npm run cli -- login --manual
 ```
 
 ## 命令示例
@@ -142,4 +148,4 @@ grep -q '扫码登录' README.md && grep -q 'login' README.md && grep -q 'post' 
 - 本项目依赖用户自己提供的微博登录态，不提供 OAuth 或多账号管理
 - Cookie 属于敏感凭据，只能保存在本地未提交文件或临时环境变量中
 - 微博页面结构、接口字段和风控策略可能变化，命令可能返回接口失败原因而不是稳定成功
-- `login` 当前提供的是本地扫码指引和登录态落盘流程，不会把二维码内容或 Cookie 上传到仓库
+- `login` 使用本地浏览器自动提取登录态，不会把二维码内容或 Cookie 上传到仓库

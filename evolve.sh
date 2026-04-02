@@ -95,6 +95,10 @@ with open('$TASKS', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
 " 2>/dev/null || true
 }
 
+set_current_task() {
+  py_state_set "current_task" "\"$1\""
+}
+
 run_acceptance() {
   local cmd
   cmd=$(task_field "$1" "acceptance_cmd")
@@ -477,11 +481,14 @@ main() {
     current_evo=$(next_evo_task)
 
     if [ -n "$current_evo" ]; then
+      set_current_task "$current_evo"
       info "── Evo Loop $evo_loop | 执行 $current_evo ──"
       run_evo_task "$current_evo"
       sleep 2
       continue
     fi
+
+    py_state_set "current_task" "null"
 
     # 没有进行中任务，检查 program.md 有没有新目标
     pending=$(check_evolution_goals)

@@ -98,6 +98,10 @@ with open('$TASKS', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
 " 2>/dev/null || true
 }
 
+set_current_task() {
+  py_state_set "current_task" "\"$1\""
+}
+
 run_acceptance() {
   local tid="$1"
   local cmd
@@ -437,6 +441,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
     # 找下一个任务
     current_task=$(next_pending_task)
     if [ -z "$current_task" ]; then
+      py_state_set "current_task" "null"
       if [ ! -f "$DONE_FILE" ]; then
         printf "## Codex Agent MVP 完成\nTime: %s\n" "$(date)" > "$DONE_FILE"
         notify "🎉 MVP 完成！进入进化模式"
@@ -446,6 +451,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
     fi
 
     ttype=$(task_field "$current_task" "type")
+    set_current_task "$current_task"
     retry=$(py_state_get "retry_count")
     [ -z "$retry" ] || [ "$retry" = "None" ] && retry=0
 
@@ -475,6 +481,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
           py_state_set "retry_count" "0"
           py_state_set "phase" '"coding"'
           py_state_set "pm_done" "True"
+          py_state_set "last_result" "\"$current_task completed\""
         else
           warn "❌ PM research 验收失败"
           # PM 失败也触发 research（搜索如何做好技术调研）
@@ -532,6 +539,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
             mark_done "$current_task"
             py_state_set "retry_count" "0"
             py_state_set "last_score" "$score"
+            py_state_set "last_result" "\"$current_task completed\""
             log "📈 已提交，分数趋势：[$trend → $score]"
           else
             warn "❌ Validator 拒绝，恢复本轮工作区快照"
@@ -563,6 +571,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
         if run_acceptance "$current_task"; then
           log "🎉 最终验收通过"
           mark_done "$current_task"
+          py_state_set "last_result" "\"$current_task completed\""
           printf "## Codex Agent MVP 完成\n\n时间：%s\nLoop 总数：%s\nknowledge 文件数：%s\nexperiments 数：%s\n" \
             "$(date)" "$loop" \
             "$(ls "$KNOWLEDGE_DIR" 2>/dev/null | wc -l)" \
@@ -707,6 +716,7 @@ evolution_loop() {
           fi
 
           ttype=$(task_field "$current_task" "type")
+          set_current_task "$current_task"
           retry=$(py_state_get "retry_count")
           [ -z "$retry" ] || [ "$retry" = "None" ] && retry=0
 
@@ -747,6 +757,7 @@ evolution_loop() {
                   mark_done "$current_task"
                   mark_evolution_done "$current_task"
                   py_state_set "retry_count" "0"
+                  py_state_set "last_result" "\"$current_task completed\""
                   log "✅ 进化任务 $current_task 完成 [score=$score]"
                   notify "✅ 新功能完成：$(task_field "$current_task" "evolution_goal")"
                 else
