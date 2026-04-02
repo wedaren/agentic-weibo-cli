@@ -4,7 +4,7 @@
       "id": "task_000",
       "type": "pm_research",
       "title": "技术可行性调研 + 项目骨架决策",
-      "status": "pending",
+      "status": "done",
       "depends_on": [],
       "acceptance": "knowledge/ 下有调研文档，decisions.md 有完整技术决策",
       "acceptance_cmd": "test -s .agent/decisions.md && ls .agent/knowledge/*.md 2>/dev/null | grep -q . && echo PASS || echo 'FAIL: research 文档不完整'"
@@ -13,8 +13,10 @@
       "id": "task_001",
       "type": "coding",
       "title": "初始化个人微博 CLI 项目骨架与基础命令入口",
-      "status": "blocked",
-      "depends_on": ["task_000"],
+      "status": "done",
+      "depends_on": [
+        "task_000"
+      ],
       "acceptance": "存在 package.json、TypeScript 配置和 CLI 入口文件；并且 npm run help 能真实输出帮助信息",
       "acceptance_cmd": "test -f package.json && test -f tsconfig.json && test -f src/index.ts && npm run help >/dev/null 2>&1 && echo PASS || echo 'FAIL: CLI 骨架未初始化完成或 help 不可执行'"
     },
@@ -23,7 +25,9 @@
       "type": "coding",
       "title": "实现扫码登录流程与本地登录态持久化",
       "status": "blocked",
-      "depends_on": ["task_001"],
+      "depends_on": [
+        "task_001"
+      ],
       "acceptance": "login 命令可执行；未登录时能展示二维码或登录提示；登录成功后能在本地生成可读取的登录态文件",
       "acceptance_cmd": "npm run cli -- login --help >/dev/null 2>&1 && test -f src/commands/login.ts && echo PASS || echo 'FAIL: 扫码登录命令未实现'"
     },
@@ -32,7 +36,9 @@
       "type": "coding",
       "title": "实现登录态加载校验和微博 API 客户端基础能力",
       "status": "blocked",
-      "depends_on": ["task_002"],
+      "depends_on": [
+        "task_002"
+      ],
       "acceptance": "存在认证模块和 API 客户端模块；未配置或失效登录态时能返回清晰错误",
       "acceptance_cmd": "test -f src/auth/session.ts && test -f src/api/client.ts && echo PASS || echo 'FAIL: 认证层或 API 客户端未完成'"
     },
@@ -41,7 +47,9 @@
       "type": "coding",
       "title": "实现发微博、个人微博列表和转发信息查询命令",
       "status": "blocked",
-      "depends_on": ["task_003"],
+      "depends_on": [
+        "task_003"
+      ],
       "acceptance": "post/list/reposts 命令存在并接入服务层",
       "acceptance_cmd": "test -f src/commands/post.ts && test -f src/commands/list.ts && test -f src/commands/reposts.ts && test -f src/services/weiboService.ts && echo PASS || echo 'FAIL: 核心微博命令未完成'"
     },
@@ -50,7 +58,9 @@
       "type": "coding",
       "title": "补充 README、配置说明和 MVP 验收命令",
       "status": "blocked",
-      "depends_on": ["task_004"],
+      "depends_on": [
+        "task_004"
+      ],
       "acceptance": "README 包含扫码登录、本地配置、命令示例和风险说明",
       "acceptance_cmd": "grep -q '扫码登录' README.md && grep -q 'login' README.md && grep -q 'post' README.md && echo PASS || echo 'FAIL: README 缺少扫码登录或命令说明'"
     }
