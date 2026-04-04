@@ -10,7 +10,7 @@ AGENT_DIR="$PROJECT_DIR/.agent"
 STATE="$AGENT_DIR/state.json"
 TASKS="$AGENT_DIR/tasks.json"
 INBOX="$AGENT_DIR/inbox/needs-you.md"
-CODEX_DIR="$PROJECT_DIR/.codex"
+AGENT_PROMPT_DIR="$PROJECT_DIR/.github/agents"
 KNOWLEDGE_DIR="$AGENT_DIR/knowledge"
 EXP_DIR="$AGENT_DIR/experiments"
 SNAPSHOT_DIR="$AGENT_DIR/run-snapshots"
@@ -112,7 +112,7 @@ run_acceptance() {
 
 notify() {
   command -v osascript &>/dev/null && \
-    osascript -e "display notification \"$1\" with title \"Codex Agent\"" 2>/dev/null || true
+    osascript -e "display notification \"$1\" with title \"Agent Runner\"" 2>/dev/null || true
   warn "━━━ $1 ━━━"
 }
 
@@ -173,8 +173,6 @@ snapshot_path.mkdir(parents=True)
 excluded_top = {
     ".git",
     ".agent",
-    ".codex",
-    ".claude",
     "node_modules",
     "dist",
 }
@@ -217,8 +215,6 @@ snapshot_path = Path(os.environ["SNAPSHOT_PATH"])
 excluded_top = {
     ".git",
     ".agent",
-    ".codex",
-    ".claude",
     "node_modules",
     "dist",
 }
@@ -294,7 +290,7 @@ run_evolution_agent() {
   log "🌱 Evolution Agent 启动，分析新功能目标..."
   local out
   out=$(run_codex_agent \
-    "$CODEX_DIR/evolution-agent.md" \
+    "$AGENT_PROMPT_DIR/evolution.agent.md" \
     "读取 .agent/program.md 的功能进化区，处理第一个 - [ ] 待处理功能（注意跳过 HTML 注释块中的内容）。
 先检查现有代码结构，再 research 行业最佳实践（如需要），然后拆解成任务追加到 tasks.json，
 更新 program.md 状态为 [~]。
@@ -317,7 +313,7 @@ run_research_agent() {
   research "🔬 Research Agent（$tid）..."
   local out
   out=$(run_codex_agent \
-    "$CODEX_DIR/research-agent.md" \
+    "$AGENT_PROMPT_DIR/research.agent.md" \
     "分析失败，找解法写入 knowledge/fix_${tid}_<描述>.md
 
 任务：$(task_field "$tid" "title")
@@ -346,7 +342,7 @@ run_coder_agent() {
   [ -n "$fail_files" ] && fail_ctx="【历史失败】\n$(tail -20 $(echo $fail_files | tr ' ' '\n' | tail -1))\n"
 
   run_codex_agent \
-    "$CODEX_DIR/coder-agent.md" \
+    "$AGENT_PROMPT_DIR/coder.agent.md" \
     "执行 ${tid}（第$((retry+1))次）。任务：$(task_field "$tid" "title")。
 
 ${fix_knowledge}${fail_ctx}
@@ -358,7 +354,7 @@ run_validator_agent() {
   local tid="$1"
   log "🔍 Validator Agent（$tid）..."
   run_codex_agent \
-    "$CODEX_DIR/validator-agent.md" \
+    "$AGENT_PROMPT_DIR/validator.agent.md" \
     "验收 ${tid}。验收命令：$(task_field "$tid" "acceptance_cmd")
 最后一行输出 'VALIDATION_RESULT: PASS' 或 'VALIDATION_RESULT: FAIL: 原因'。
 更新 .agent/state.json 的 last_validation 字段。" \
@@ -456,7 +452,7 @@ main() {
   command -v codex &>/dev/null || { err "未找到 codex"; exit 1; }
   command -v python3 &>/dev/null || { err "需要 python3"; exit 1; }
 
-  log "🌱 Codex Agent — 功能进化模式"
+  log "🌱 Agent Runner — 功能进化模式"
   log "项目：$PROJECT_DIR"
   log ""
   log "追加新功能：编辑 .agent/program.md"

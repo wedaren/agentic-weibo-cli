@@ -1,5 +1,5 @@
 #!/bin/bash
-# init.sh — 从模板初始化新的 codex agentic 项目
+# init.sh — 从模板初始化新的 agentic 项目
 # 用法：bash init.sh <项目名> <项目描述>
 #
 # 例：bash init.sh my-app "一个帮助用户管理任务的 Web 应用"
@@ -20,7 +20,7 @@ log "初始化项目：$PROJECT_NAME"
 log "目标目录：$TARGET_DIR"
 
 # 创建目录结构
-mkdir -p "$TARGET_DIR"/{.agent/{experiments,knowledge,inbox},.codex}
+mkdir -p "$TARGET_DIR"/{.agent/{experiments,knowledge,inbox},.github/{agents,prompts,instructions}}
 
 # 复制并替换模板文件
 replace_vars() {
@@ -32,7 +32,7 @@ replace_vars() {
 
 replace_vars "$TEMPLATE_DIR/.agent/program.md"    "$TARGET_DIR/.agent/program.md"
 replace_vars "$TEMPLATE_DIR/.agent/decisions.md"  "$TARGET_DIR/.agent/decisions.md"
-replace_vars "$TEMPLATE_DIR/CODEX.md"             "$TARGET_DIR/CODEX.md"
+replace_vars "$TEMPLATE_DIR/AGENTS.md"            "$TARGET_DIR/AGENTS.md"
 
 # 直接复制不需要替换的文件
 cp "$TEMPLATE_DIR/.agent/tasks.json"  "$TARGET_DIR/.agent/tasks.json"
@@ -40,12 +40,9 @@ cp "$TEMPLATE_DIR/.agent/state.json"  "$TARGET_DIR/.agent/state.json"
 cp "$TEMPLATE_DIR/tick.sh"            "$TARGET_DIR/tick.sh"
 cp "$TEMPLATE_DIR/evolve.sh"          "$TARGET_DIR/evolve.sh"
 
-# agent prompts — 替换项目名
-for agent in pm coder validator research evolution; do
-  replace_vars \
-    "$TEMPLATE_DIR/.codex/${agent}-agent.md" \
-    "$TARGET_DIR/.codex/${agent}-agent.md"
-done
+cp -R "$TEMPLATE_DIR/.github/agents/." "$TARGET_DIR/.github/agents/"
+cp -R "$TEMPLATE_DIR/.github/prompts/." "$TARGET_DIR/.github/prompts/"
+cp -R "$TEMPLATE_DIR/.github/instructions/." "$TARGET_DIR/.github/instructions/"
 
 chmod +x "$TARGET_DIR/tick.sh" "$TARGET_DIR/evolve.sh"
 

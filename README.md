@@ -2,9 +2,15 @@
 
 面向个人账号的本地单用户微博命令行工具，支持本地浏览器扫码登录、加载本地登录态、发布微博、查看个人微博列表，以及查询指定微博的转发信息。
 
+项目同时提供：
+
+- CLI：直接执行微博登录、发微博、列微博、查转发
+- Skills：给 AI 代理或团队成员的任务说明文档，统一每个命令的输入、步骤和成功标准
+
 ## 环境要求
 
-- Node.js `>=20`
+- Python `>=3.14`
+- Node.js `>=20`（仅用于 `npm run ...` 便捷脚本）
 - npm
 - 本地可访问微博登录页与 `m.weibo.cn`
 
@@ -19,6 +25,29 @@ CLI 入口：
 
 ```bash
 npm run cli -- --help
+```
+
+初始化 Python skill 运行环境：
+
+```bash
+npm run skills:venv
+```
+
+如果不想通过 npm，也可以直接执行：
+
+```bash
+python3 -m venv skills/weibo-cli/.venv
+skills/weibo-cli/.venv/bin/python3 -m pip install -r skills/weibo-cli/requirements.txt
+```
+
+Skills 入口：
+
+```bash
+npm run cli -- skills
+npm run cli -- skills show weibo-cli
+npm run cli -- skills prompt
+npm run cli -- skills validate
+npm run smoke
 ```
 
 ## 本地配置说明
@@ -89,6 +118,36 @@ npm run cli -- login --manual
 npm run help
 ```
 
+查看可用 skills：
+
+```bash
+npm run cli -- skills
+```
+
+查看某个 skill 文档：
+
+```bash
+npm run cli -- skills show weibo-cli
+```
+
+输出适合 agent 注入的 `<available_skills>` XML：
+
+```bash
+npm run cli -- skills prompt
+```
+
+校验当前仓库的 skills 是否符合规范：
+
+```bash
+npm run skills:validate
+```
+
+执行一轮无副作用本地自检：
+
+```bash
+npm run smoke
+```
+
 发布微博：
 
 ```bash
@@ -114,6 +173,57 @@ npm run cli -- reposts --weibo-id 1234567890123456 --limit 20 --page 1
 - 登录态过期：重新运行 `login` 更新本地文件
 - 请求被风控或接口变化：CLI 会返回明确的 HTTP 错误或鉴权错误信息
 
+## 已验证能力
+
+在 2026-04-04 的本地实测中，以下链路已完成真实验证：
+
+- `login`：真实浏览器扫码成功，能提取并写回本地登录态
+- `post`：真实发布成功，并返回微博 ID、BID 和访问链接
+- `list`：能读取最近微博，并正确展示原创和转发内容
+- `reposts`：能查询指定微博转发；当无数据时返回稳定空结果提示
+- `login --from-env`：已验证可以使用环境变量中的 cookie/uid 重新写入本地登录态
+
+同一轮验证中还修复了一个实际缺陷：登录态探测请求此前未正确携带 cookie，导致 `login --from-env` 可能误判登录态失效；当前版本已修复。
+
+## Skills 规范
+
+当前仓库只提供 1 个总 skill，目录位于 [`skills/`](/Users/wedaren/repositoryDestinationOfGithub/agentic-weibo-cli/skills)：
+
+- `weibo-cli`：统一处理微博登录、发微博、列微博、查转发
+
+这些文档既可以直接阅读，也可以通过 CLI 查看：
+
+```bash
+npm run cli -- skills
+npm run cli -- skills show weibo-cli
+```
+
+项目当前遵循 Agent Skills 与 `vercel-labs/skills` 的通用约定：
+
+- 每个 skill 是一个目录，至少包含一个 `SKILL.md`
+- `SKILL.md` 必须带 YAML frontmatter，至少包含 `name` 和 `description`
+- `name` 必须与父目录同名，例如 `skills/weibo-cli/SKILL.md` 对应 `name: weibo-cli`
+- agent 可发现的信息以 `SKILL.md` 为唯一事实来源，CLI 不再在 TS 代码里手工重复维护一份元数据
+- 当前 skill 会优先通过相对路径调用自身目录下的 `scripts/weibo-cli`，不依赖仓库根目录的 `npm run cli -- ...`
+- 包装脚本会优先使用 `skills/weibo-cli/.venv/bin/python3`；若该虚拟环境不存在，则回退到系统 `python3`
+
+如果你后续要扩展更多能力，优先在 `weibo-cli` 这个总 skill 中补充命令选择规则与 references；只有当新能力已经明显超出“微博 CLI 使用方法”这一边界时，再拆新的 skill。
+
+### skill 目录中的 CLI 如何组织
+
+当前仓库采用“应用构建产物”和“skill 分发产物”分离：
+
+- `skills/weibo-cli/scripts/weibo_cli/`：Python 实现源码
+- `skills/weibo-cli/scripts/weibo-cli`：给 agent 调用的稳定包装入口
+- `skills/weibo-cli/.venv/`：skill 本地虚拟环境，安装 `requests` 与 `playwright`
+
+这个仓库里应保持以下边界：
+
+- `skills/`：skill 源文件、Python 实现、包装脚本和参考文档，给 agent 发现和按需加载
+- 根目录只保留仓库元数据与便捷脚本，不再承载 CLI 业务实现
+
+因此这里不再维护 `src/` 作为主实现目录，所有 CLI 业务实现都收敛到 `skills/weibo-cli/scripts/weibo_cli/`。
+
 ## MVP 验收命令
 
 构建与帮助：
@@ -135,6 +245,12 @@ npm run cli -- post --text "test from cli"
 npm run cli -- post --text "test from cli"
 npm run cli -- list --limit 5
 npm run cli -- reposts --weibo-id <id> --limit 20
+```
+
+无副作用自检命令：
+
+```bash
+npm run smoke
 ```
 
 任务验收命令：

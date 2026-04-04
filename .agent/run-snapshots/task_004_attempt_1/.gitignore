@@ -1,7 +1,0 @@
-# Local build output and dependencies.
-dist/
-node_modules/
-
-# Local authentication/config artifacts.
-.local/
-.env

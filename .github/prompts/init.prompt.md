@@ -144,42 +144,7 @@ cp -r <模板目录>/.github/agents <目标目录>/.github/
 cp -r <模板目录>/.github/prompts <目标目录>/.github/
 ```
 
-### 8. 创建 `CLAUDE.md`（兼容 Claude CLI）
-
-写入以下内容：
-
-```markdown
-# {{PROJECT_NAME}}
-
-## 一句话介绍
-
-{{项目描述}}
-
-## 启动（VS Code Copilot）
-
-1. 编辑 `.agent/program.md` — 写目标和约束
-2. 打开 Chat，输入 `/tick` — 系统自动完成 MVP
-3. 追加功能 — 在 `program.md` 末尾加 `- [ ] 你的想法`
-4. 输入 `/evolve` — 系统自动实现新功能
-
-## 启动（Claude CLI，备选）
-
-```bash
-bash tick.sh    # MVP 阶段
-bash evolve.sh  # 进化阶段
-```
-
-## 查看进度
-
-```bash
-cat .agent/tasks.json | python3 -m json.tool
-cat .agent/decisions.md
-ls .agent/experiments/
-ls .agent/knowledge/
-```
-```
-
-### 9. 初始化 git
+### 8. 初始化 git
 
 ```bash
 cd <目标目录>

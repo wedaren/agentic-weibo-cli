@@ -4,24 +4,20 @@
   "description": "Personal Weibo CLI for local single-user workflows.",
   "private": true,
   "bin": {
-    "weibo-cli": "dist/bin/cli.js"
+    "weibo-cli": "skills/weibo-cli/scripts/weibo-cli"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "cli": "npm run build --silent && node dist/bin/cli.js",
-    "help": "npm run cli -- --help"
+    "build": "python3 -m compileall skills/weibo-cli/scripts/weibo_cli",
+    "cli": "skills/weibo-cli/scripts/weibo-cli",
+    "help": "npm run cli -- --help",
+    "smoke": "skills/weibo-cli/scripts/self-check",
+    "skills:validate": "npm run cli -- skills validate",
+    "skills:build": "python3 -m compileall skills/weibo-cli/scripts/weibo_cli",
+    "skills:venv": "python3 -m venv skills/weibo-cli/.venv && skills/weibo-cli/.venv/bin/python3 -m pip install -r skills/weibo-cli/requirements.txt"
   },
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "commander": "^14.0.1",
-    "playwright": "^1.59.1",
-    "qrcode-terminal": "^0.12.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.7.2",
-    "@types/qrcode-terminal": "^0.12.2",
-    "typescript": "^5.9.3"
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

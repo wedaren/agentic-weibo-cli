@@ -1,23 +1,23 @@
 ## 结论（3 句话以内）
-MVP 采用 Node.js + TypeScript + Commander.js + 原生 `fetch`/Undici 的组合，满足 CLI 分层、轻量和无额外运行时约束。CLI 入口走 npm script + `package.json#bin`，配置层优先环境变量，再落到本地未提交配置文件。扫码登录相关二维码展示可优先采用终端二维码库，HTTP 调用不额外引入大型 SDK。
+当前仓库采用 Python + argparse + requests + Playwright 的组合实现微博 CLI，所有业务实现都收敛在单一 `weibo-cli` skill 目录中。根目录 `package.json` 只承担便捷脚本和 bin 暴露职责，真正稳定入口是 `skills/weibo-cli/scripts/weibo-cli`。依赖优先安装到 `skills/weibo-cli/.venv/`，配置优先环境变量，其次本地未提交配置文件。
 
 ## 关键 API / 配置
-- Commander.js：使用 `Command`、`.command()`、`.option()`、`.requiredOption()`、`.parseAsync()` 组织多子命令 CLI。
-- Node.js：优先用内建 `fetch` 发送微博请求；需要连接池或流式能力时再下沉到 Undici 的 `Pool`/`stream`。
-- npm：在 `package.json` 使用 `bin` 暴露 CLI 可执行入口，入口文件需带 `#!/usr/bin/env node`。
-- 配置存储：本地配置可使用 `conf` 这类基于系统用户配置目录的方案；敏感字段不入仓库，文件权限可收紧到 `0o600`。
-- 终端二维码：`qrcode-terminal` 支持直接把二维码内容渲染到终端，适合本地扫码登录指引。
+- argparse：用于注册 `login`、`post`、`list`、`reposts`、`skills` 子命令，并维持标准帮助输出。
+- requests：负责微博 HTTP 请求、cookie 注入、错误归一与基础限流。
+- Playwright（Python）：负责本地浏览器自动化登录和 cookie 抓取。
+- Python venv：通过 `skills/weibo-cli/.venv/` 隔离 skill 运行依赖，避免污染系统 Python。
+- npm：保留 `npm run help`、`npm run cli -- ...`、`npm run skills:venv` 作为仓库级便捷入口。
 
 ## 注意事项
-- `fetch` 已足够覆盖 MVP 的 JSON 请求和错误处理；只有在需要细粒度连接复用时才引入 Undici 高级 API。
-- `conf` 的“加密”更偏向混淆，不应视为真正的密钥保护；登录态仍需通过 `.gitignore` 和本地权限控制保护。
-- CLI 可读输出优先，JSON 输出模式放到后续演进功能实现。
+- 真正给 agent 调用的入口应是 `scripts/weibo-cli`，不能把仓库根目录 `npm run cli -- ...` 当成唯一执行方式。
+- `compileall` 只用于快速语法校验，不是分发产物；`__pycache__` 和 `*.pyc` 不应纳入版本控制。
+- Playwright Python 依赖内部仍会携带 Node driver，但这不改变本仓库“业务实现是 Python”的事实。
+- 登录态仍需通过 `.gitignore`、本地文件权限和环境变量保护，不应入仓库。
 
 ## 来源
-- 官方：Commander.js README, https://github.com/tj/commander.js
-- 官方：Node.js Fetch 文档, https://nodejs.org/en/learn/getting-started/fetch
-- 官方：npm package.json `bin` 文档, https://docs.npmjs.com/cli/v11/configuring-npm/package-json/#bin
-- 官方/项目 README：Conf, https://github.com/sindresorhus/conf
-- 官方/项目 README：qrcode-terminal, https://github.com/gtanner/qrcode-terminal
+- 官方：Python argparse 文档, https://docs.python.org/3/library/argparse.html
+- 官方：Requests 文档, https://requests.readthedocs.io/
+- 官方：Playwright for Python 文档, https://playwright.dev/python/
+- 官方：Python venv 文档, https://docs.python.org/3/library/venv.html
 
 ## 可信度：高

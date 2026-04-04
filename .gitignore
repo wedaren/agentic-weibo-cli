@@ -1,6 +1,9 @@
 # Local build output and dependencies.
 dist/
 node_modules/
+skills/weibo-cli/.venv/
+__pycache__/
+*.pyc
 
 # Local authentication/config artifacts.
 .local/

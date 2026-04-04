@@ -1,5 +1,5 @@
 #!/bin/bash
-# tick.sh — Codex Agent v3
+# tick.sh — Agent Runner v3
 # 新增：失败自动触发 Research Agent、量化分数、知识积累
 # 用法：bash tick.sh
 
@@ -11,7 +11,7 @@ STATE="$AGENT_DIR/state.json"
 TASKS="$AGENT_DIR/tasks.json"
 INBOX="$AGENT_DIR/inbox/needs-you.md"
 DONE_FILE="$AGENT_DIR/inbox/done.md"
-CODEX_DIR="$PROJECT_DIR/.codex"
+AGENT_PROMPT_DIR="$PROJECT_DIR/.github/agents"
 KNOWLEDGE_DIR="$AGENT_DIR/knowledge"
 EXP_DIR="$AGENT_DIR/experiments"
 SNAPSHOT_DIR="$AGENT_DIR/run-snapshots"
@@ -116,7 +116,7 @@ run_acceptance() {
 
 notify() {
   command -v osascript &>/dev/null && \
-    osascript -e "display notification \"$1\" with title \"Codex Agent\"" 2>/dev/null || true
+    osascript -e "display notification \"$1\" with title \"Agent Runner\"" 2>/dev/null || true
   warn "━━━ $1 ━━━"
 }
 
@@ -177,8 +177,6 @@ snapshot_path.mkdir(parents=True)
 excluded_top = {
     ".git",
     ".agent",
-    ".codex",
-    ".claude",
     "node_modules",
     "dist",
 }
@@ -221,8 +219,6 @@ snapshot_path = Path(os.environ["SNAPSHOT_PATH"])
 excluded_top = {
     ".git",
     ".agent",
-    ".codex",
-    ".claude",
     "node_modules",
     "dist",
 }
@@ -282,7 +278,7 @@ attempt_snapshot_name() {
 run_pm_agent() {
   log "🧠 PM Agent 启动..."
   run_codex_agent \
-    "$CODEX_DIR/pm-agent.md" \
+    "$AGENT_PROMPT_DIR/pm.agent.md" \
     "执行 task_000：技术调研。完成后更新 tasks.json（task_000 status=done）和 state.json（pm_done=true）。" \
     "yes" || true
 }
@@ -318,7 +314,7 @@ run_coder_agent() {
   fi
 
   run_codex_agent \
-    "$CODEX_DIR/coder-agent.md" \
+    "$AGENT_PROMPT_DIR/coder.agent.md" \
     "执行 ${tid}（第${attempt}次）。任务：$(task_field "$tid" "title")。
 
 ${fix_knowledge}
@@ -338,7 +334,7 @@ run_research_agent() {
 
   local output
   output=$(run_codex_agent \
-    "$CODEX_DIR/research-agent.md" \
+    "$AGENT_PROMPT_DIR/research.agent.md" \
     "分析以下失败记录，找到解法并写入 knowledge/ 目录。
 
 任务ID：$tid
@@ -368,7 +364,7 @@ run_validator_agent() {
   local tid="$1"
   log "🔍 Validator Agent（$tid）..."
   run_codex_agent \
-    "$CODEX_DIR/validator-agent.md" \
+    "$AGENT_PROMPT_DIR/validator.agent.md" \
     "验收 ${tid}。
 验收命令：$(task_field "$tid" "acceptance_cmd")
 最后一行输出 'VALIDATION_RESULT: PASS' 或 'VALIDATION_RESULT: FAIL: 原因'。
@@ -406,7 +402,7 @@ check_env() {
 # ════════════════════════════════════════════════════════════
 main() {
   check_env
-  log "🚀 Codex Agent v3 | autoresearch 版"
+  log "🚀 Agent Runner v3 | autoresearch 版"
   log "项目：$PROJECT_DIR"
   log "停止：Ctrl+C"
   echo ""
@@ -433,7 +429,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
 
     # 检查完成
     if [ -f "$DONE_FILE" ]; then
-      notify "🎉 Codex Agent MVP 完成！"
+      notify "🎉 Agent Runner MVP 完成！"
       cat "$DONE_FILE"
       exit 0
     fi
@@ -443,7 +439,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
     if [ -z "$current_task" ]; then
       py_state_set "current_task" "null"
       if [ ! -f "$DONE_FILE" ]; then
-        printf "## Codex Agent MVP 完成\nTime: %s\n" "$(date)" > "$DONE_FILE"
+        printf "## Agent Runner MVP 完成\nTime: %s\n" "$(date)" > "$DONE_FILE"
         notify "🎉 MVP 完成！进入进化模式"
       fi
       evolution_loop
@@ -572,7 +568,7 @@ with open('$STATE', 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
           log "🎉 最终验收通过"
           mark_done "$current_task"
           py_state_set "last_result" "\"$current_task completed\""
-          printf "## Codex Agent MVP 完成\n\n时间：%s\nLoop 总数：%s\nknowledge 文件数：%s\nexperiments 数：%s\n" \
+          printf "## Agent Runner MVP 完成\n\n时间：%s\nLoop 总数：%s\nknowledge 文件数：%s\nexperiments 数：%s\n" \
             "$(date)" "$loop" \
             "$(ls "$KNOWLEDGE_DIR" 2>/dev/null | wc -l)" \
             "$(ls "$EXP_DIR" 2>/dev/null | wc -l)" \
@@ -651,7 +647,7 @@ run_evolution_agent() {
   log "🌱 Evolution Agent 启动..."
   local out
   out=$(run_codex_agent \
-    "$CODEX_DIR/evolution-agent.md" \
+    "$AGENT_PROMPT_DIR/evolution.agent.md" \
     "读取 .agent/program.md 的功能进化区，处理第一个待处理（- [ ]）功能。
 按规范拆解任务追加到 tasks.json，更新 program.md 状态。
 最后一行输出 EVOLUTION_RESULT: <任务ID列表> | <功能名>" \
