@@ -21,14 +21,22 @@ class SkillDefinition:
 
 def discover_skill_files(repo_root: Path) -> list[Path]:
     skill_files: list[Path] = []
-    for root in (repo_root / "skills", repo_root / ".agents" / "skills"):
+    root_skill = repo_root / "SKILL.md"
+    if root_skill.exists():
+        skill_files.append(root_skill)
+
+    search_roots = [repo_root / ".agents" / "skills"]
+    if not root_skill.exists():
+        search_roots.insert(0, repo_root / "skills")
+
+    for root in search_roots:
         if not root.exists():
             continue
         for child in root.iterdir():
             skill_md = child / "SKILL.md"
             if child.is_dir() and skill_md.exists():
                 skill_files.append(skill_md)
-    return sorted(skill_files)
+    return sorted({path.resolve() for path in skill_files})
 
 
 def parse_frontmatter(raw_content: str) -> tuple[dict[str, str], str]:
@@ -61,14 +69,14 @@ def parse_frontmatter(raw_content: str) -> tuple[dict[str, str], str]:
     return metadata, body
 
 
-def validate_skill(skill_path: Path, metadata: dict[str, Any]) -> list[str]:
+def validate_skill(skill_path: Path, metadata: dict[str, Any], repo_root: Path) -> list[str]:
     errors: list[str] = []
     directory_name = skill_path.parent.name
     name = metadata.get("name", "")
     description = metadata.get("description", "")
     if not name:
         errors.append("frontmatter 必须包含非空字符串字段 name")
-    elif name != directory_name:
+    elif skill_path.parent != repo_root and name != directory_name:
         errors.append(f"name 必须与父目录同名，当前目录为 {directory_name}")
     if not description:
         errors.append("frontmatter 必须包含非空字符串字段 description")
@@ -82,7 +90,7 @@ def load_skills(repo_root: Path) -> tuple[list[SkillDefinition], list[tuple[str,
         raw_content = skill_path.read_text(encoding="utf-8")
         try:
             metadata, body = parse_frontmatter(raw_content)
-            errors = validate_skill(skill_path, metadata)
+            errors = validate_skill(skill_path, metadata, repo_root)
             if errors:
                 issues.append((str(skill_path), errors))
                 continue

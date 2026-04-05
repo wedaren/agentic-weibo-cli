@@ -4,16 +4,16 @@
   "description": "Personal Weibo CLI for local single-user workflows.",
   "private": true,
   "bin": {
-    "weibo-cli": "skills/weibo-cli/scripts/weibo-cli"
+    "weibo-cli": "scripts/weibo-cli"
   },
   "scripts": {
-    "build": "python3 -m compileall skills/weibo-cli/scripts/weibo_cli",
-    "cli": "skills/weibo-cli/scripts/weibo-cli",
+    "build": "python3 -m compileall scripts/weibo_cli",
+    "cli": "scripts/weibo-cli",
     "help": "npm run cli -- --help",
-    "smoke": "skills/weibo-cli/scripts/self-check",
+    "smoke": "scripts/self-check",
     "skills:validate": "npm run cli -- skills validate",
-    "skills:build": "python3 -m compileall skills/weibo-cli/scripts/weibo_cli",
-    "skills:venv": "python3 -m venv skills/weibo-cli/.venv && skills/weibo-cli/.venv/bin/python3 -m pip install -r skills/weibo-cli/requirements.txt"
+    "skills:build": "python3 -m compileall scripts/weibo_cli",
+    "skills:venv": "python3 -m venv .venv && .venv/bin/python3 -m pip install -r requirements.txt"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,25 @@
+{
+  "assertion_results": [
+    {
+      "text": "输出明确使用 reposts 子命令",
+      "passed": true,
+      "evidence": "回答中给出了 scripts/weibo-cli reposts --weibo-id 1234567890123456 --limit 20 --page 1。"
+    },
+    {
+      "text": "输出提到 --limit 或 --page 至少一个可选参数",
+      "passed": true,
+      "evidence": "回答中同时提到了 --limit 20 与 --page 1。"
+    },
+    {
+      "text": "输出没有要求用户先补充微博 ID，因为 prompt 中已经提供了 ID",
+      "passed": false,
+      "evidence": "回答中写了“请先提供明确的微博 ID”，与输入 prompt 已给出 ID 相矛盾。"
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 1,
+    "total": 3,
+    "pass_rate": 0.67
+  }
+}

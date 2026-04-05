@@ -15,9 +15,9 @@
 
 ## 系统组成
 
-- 单一 skill 文档：`skills/weibo-cli/SKILL.md` 作为 agent 发现入口，描述何时使用、如何选命令、如何验证成功
-- CLI 命令入口：通过 `skills/weibo-cli/scripts/weibo-cli` 提供 `login`、`post`、`list`、`reposts`、`skills` 子命令
-- Python 实现模块：所有业务实现统一放在 `skills/weibo-cli/scripts/weibo_cli/`
+- 单一 skill 文档：`SKILL.md` 作为 agent 发现入口，描述何时使用、如何选命令、如何验证成功
+- CLI 命令入口：通过 `scripts/weibo-cli` 提供 `login`、`post`、`list`、`reposts`、`skills` 子命令
+- Python 实现模块：所有业务实现统一放在 `scripts/weibo_cli/`
 - 配置模块：管理 cookie、用户 ID、默认分页参数等本地配置
 - 扫码登录模块：负责打开本地浏览器、轮询登录状态、在成功后持久化登录态
 - 会话/认证模块：读取并校验个人微博登录态，负责 cookie 注入、失效检测、错误提示，并兼容扫码登录产物
@@ -30,7 +30,7 @@
 ## 约束（不能动的）
 
 - 只做本地单用户 CLI，不做 Web 页面，不做多用户账号系统
-- 优先使用 Python 实现，并把所有业务源码收敛到 `skills/weibo-cli/scripts/weibo_cli/`
+- 优先使用 Python 实现，并把所有业务源码收敛到 `scripts/weibo_cli/`
 - 保留 `npm run ...` 作为仓库便捷入口，但 skill 必须能优先通过相对路径 `scripts/weibo-cli` 独立调用
 - 不依赖第三方付费服务或额外 API key；微博访问基于用户自己提供的登录态
 - 登录态等敏感信息不能硬编码进仓库，必须通过环境变量或本地未提交配置文件读取
@@ -38,7 +38,7 @@
 - MVP 阶段先支持个人账号常用能力，不做自动化养号、批量群发、定时任务
 - 输出以可读、稳定、便于脚本二次处理为目标，错误信息需要明确
 - 鉴权、接口调用、命令解析、格式化输出必须分层，禁止全部揉在一个文件里
-- 运行依赖优先放在 skill 本地虚拟环境 `skills/weibo-cli/.venv/`，避免依赖系统 Python 全局环境
+- 运行依赖优先放在 skill 本地虚拟环境 `.venv/`，避免依赖系统 Python 全局环境
 
 ---
 

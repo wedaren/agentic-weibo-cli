@@ -18,7 +18,7 @@
         "task_000"
       ],
       "acceptance": "存在 package.json、单一 skill 入口和 Python CLI 入口文件；并且 npm run help 能真实输出帮助信息",
-      "acceptance_cmd": "test -f package.json && test -f skills/weibo-cli/SKILL.md && test -f skills/weibo-cli/scripts/weibo-cli && test -f skills/weibo-cli/scripts/weibo_cli/cli.py && npm run help >/dev/null 2>&1 && echo PASS || echo 'FAIL: Python skill CLI 骨架未初始化完成或 help 不可执行'"
+      "acceptance_cmd": "test -f package.json && test -f SKILL.md && test -f scripts/weibo-cli && test -f scripts/weibo_cli/cli.py && npm run help >/dev/null 2>&1 && echo PASS || echo 'FAIL: Python skill CLI 骨架未初始化完成或 help 不可执行'"
     },
     {
       "id": "task_002",
@@ -29,7 +29,7 @@
         "task_001"
       ],
       "acceptance": "login 命令可执行；未登录时能展示登录提示；登录成功后能在本地生成可读取的登录态文件",
-      "acceptance_cmd": "npm run build >/dev/null 2>&1 && npm run cli -- login --help >/dev/null 2>&1 && skills/weibo-cli/scripts/weibo-cli login --check-browser >/dev/null 2>&1 && test -f skills/weibo-cli/scripts/weibo_cli/browser_login.py && test -f skills/weibo-cli/scripts/weibo_cli/session.py && echo PASS || echo 'FAIL: 浏览器扫码登录链路未实现'"
+      "acceptance_cmd": "npm run build >/dev/null 2>&1 && npm run cli -- login --help >/dev/null 2>&1 && scripts/weibo-cli login --check-browser >/dev/null 2>&1 && test -f scripts/weibo_cli/browser_login.py && test -f scripts/weibo_cli/session.py && echo PASS || echo 'FAIL: 浏览器扫码登录链路未实现'"
     },
     {
       "id": "task_003",
@@ -40,7 +40,7 @@
         "task_002"
       ],
       "acceptance": "存在认证模块和 API 客户端模块；未配置或失效登录态时能返回清晰错误",
-      "acceptance_cmd": "test -f skills/weibo-cli/scripts/weibo_cli/session.py && test -f skills/weibo-cli/scripts/weibo_cli/api_client.py && echo PASS || echo 'FAIL: 认证层或 API 客户端未完成'"
+      "acceptance_cmd": "test -f scripts/weibo_cli/session.py && test -f scripts/weibo_cli/api_client.py && echo PASS || echo 'FAIL: 认证层或 API 客户端未完成'"
     },
     {
       "id": "task_004",
@@ -51,7 +51,7 @@
         "task_003"
       ],
       "acceptance": "post/list/reposts 命令存在并接入服务层",
-      "acceptance_cmd": "test -f skills/weibo-cli/scripts/weibo_cli/cli.py && test -f skills/weibo-cli/scripts/weibo_cli/service.py && npm run cli -- list --help >/dev/null 2>&1 && npm run cli -- reposts --help >/dev/null 2>&1 && echo PASS || echo 'FAIL: 核心微博命令未完成'"
+      "acceptance_cmd": "test -f scripts/weibo_cli/cli.py && test -f scripts/weibo_cli/service.py && npm run cli -- list --help >/dev/null 2>&1 && npm run cli -- reposts --help >/dev/null 2>&1 && echo PASS || echo 'FAIL: 核心微博命令未完成'"
     },
     {
       "id": "task_005",
@@ -62,7 +62,7 @@
         "task_004"
       ],
       "acceptance": "README 与 skill 文档包含本地配置、命令示例、skill 用法和风险说明",
-      "acceptance_cmd": "grep -q 'skills validate' README.md && grep -q 'weibo-cli' README.md && grep -q 'scripts/weibo-cli post' skills/weibo-cli/references/commands.md && echo PASS || echo 'FAIL: README 或 skill 文档缺少当前命令说明'"
+      "acceptance_cmd": "grep -q 'skills validate' README.md && grep -q 'weibo-cli' README.md && grep -q 'scripts/weibo-cli post' references/commands.md && echo PASS || echo 'FAIL: README 或 skill 文档缺少当前命令说明'"
     }
   ]
 }

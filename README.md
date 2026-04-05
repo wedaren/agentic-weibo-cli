@@ -1,11 +1,10 @@
 # agentic-weibo-cli
 
-面向个人账号的本地单用户微博命令行工具，支持本地浏览器扫码登录、加载本地登录态、发布微博、查看个人微博列表，以及查询指定微博的转发信息。
+面向个人账号的本地单用户微博命令行工具，支持本地浏览器扫码登录、加载本地登录态、发布微博、查看微博详情、查看个人微博列表、查询评论与转发、发表评论、点赞、取消点赞，以及删除自己发布的微博。
 
-项目同时提供：
+这个仓库现在本身就是一个单一标准 skill 目录：根目录直接包含 `SKILL.md`、`scripts/`、`references/`、`evals/` 与 `requirements.txt`。既可以直接作为 Agent Skills skill 使用，也可以通过内置 CLI 执行微博操作。
 
-- CLI：直接执行微博登录、发微博、列微博、查转发
-- Skills：给 AI 代理或团队成员的任务说明文档，统一每个命令的输入、步骤和成功标准
+当前实现的模块分层、调用链与会话模型见 [references/architecture.md](/Users/wedaren/.agents/skills/agentic-weibo-cli/references/architecture.md)。
 
 ## 环境要求
 
@@ -36,15 +35,15 @@ npm run skills:venv
 如果不想通过 npm，也可以直接执行：
 
 ```bash
-python3 -m venv skills/weibo-cli/.venv
-skills/weibo-cli/.venv/bin/python3 -m pip install -r skills/weibo-cli/requirements.txt
+python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
 ```
 
 Skills 入口：
 
 ```bash
 npm run cli -- skills
-npm run cli -- skills show weibo-cli
+npm run cli -- skills show agentic-weibo-cli
 npm run cli -- skills prompt
 npm run cli -- skills validate
 npm run smoke
@@ -62,20 +61,54 @@ npm run smoke
 - `WEIBO_COOKIE`：完整浏览器 Cookie 字符串，至少建议包含 `SUB`、`SUBP`、`SCF` 之一
 - `WEIBO_UID`：当前账号 UID，可选
 - `WEIBO_CLI_DATA_DIR`：本地配置目录，默认是仓库下的 `.local/`
+- `WEIBO_BROWSER_PROFILE_DIR`：浏览器自动化登录的持久化资料目录，默认是 `.local/browser-profile`
 - `WEIBO_API_BASE_URL`：微博接口根地址，默认 `https://m.weibo.cn`
 
 默认本地登录态文件示例：
 
 ```json
 {
-  "cookie": "SUB=...; SUBP=...; SCF=...",
+  "version": 2,
   "uid": "1234567890",
-  "loginUrl": "https://passport.weibo.com/sso/signin?entry=wapsso&source=wapssowb&url=https%3A%2F%2Fweibo.com",
-  "updatedAt": "2026-04-02T16:00:00.000Z"
+  "login_url": "https://passport.weibo.com/sso/signin?entry=wapsso&source=wapssowb&url=https%3A%2F%2Fweibo.com",
+  "updated_at": "2026-04-04T07:50:03.907218Z",
+  "cookies": [
+    {
+      "name": "SUB",
+      "value": "...",
+      "domain": ".weibo.com",
+      "path": "/",
+      "expires": 1777880106,
+      "secure": true,
+      "http_only": true
+    }
+  ]
 }
 ```
 
 `.local/` 和 `.env` 已加入 `.gitignore`，不要把真实 Cookie 提交到仓库。
+
+读取时仍兼容旧格式 `cookie` / `cookieJar`，但当前版本写回本地时统一使用上面的结构化 schema。
+
+## 架构概览
+
+当前实现按职责拆成五层：
+
+- 入口层：`scripts/weibo-cli`、`scripts/weibo_cli/cli.py`
+- 鉴权层：`scripts/weibo_cli/auth.py`
+- 传输层：`scripts/weibo_cli/api_client.py`
+- 业务层：`scripts/weibo_cli/service.py`
+- 存储层：`scripts/weibo_cli/session.py`、`scripts/weibo_cli/local_config.py`
+
+浏览器登录适配位于 `scripts/weibo_cli/browser_login.py`，Skill 元数据发现与输出位于 `scripts/weibo_cli/skill_catalog.py`。
+
+典型调用链如下：
+
+```text
+CLI -> AuthService -> SessionStore / ApiClient -> Weibo API -> Service normalization -> Output
+```
+
+更完整的分层职责、登录链路和 cookie 处理策略见 [references/architecture.md](/Users/wedaren/.agents/skills/agentic-weibo-cli/references/architecture.md)。
 
 ## 扫码登录
 
@@ -88,9 +121,16 @@ npm run cli -- login
 默认情况下，该命令会：
 
 - 自动打开本地 Chrome/Chromium 到微博登录页
+- 默认复用 `.local/browser-profile` 作为自动化浏览器资料目录，而不是每次创建全新临时浏览器
 - 等待你在浏览器里扫码完成登录
 - 自动提取浏览器中的微博登录 cookie
 - 把登录态写入 `.local/weibo-session.json`
+
+如果你要显式指定浏览器资料目录：
+
+```bash
+npm run cli -- login --browser-user-data-dir .local/browser-profile
+```
 
 检查浏览器自动化依赖是否可用：
 
@@ -127,7 +167,7 @@ npm run cli -- skills
 查看某个 skill 文档：
 
 ```bash
-npm run cli -- skills show weibo-cli
+npm run cli -- skills show agentic-weibo-cli
 ```
 
 输出适合 agent 注入的 `<available_skills>` XML：
@@ -154,10 +194,48 @@ npm run smoke
 npm run cli -- post --text "test from cli"
 ```
 
+查看指定微博详情：
+
+```bash
+npm run cli -- show --weibo-id 1234567890123456
+```
+
 查看自己最近发布的微博：
 
 ```bash
 npm run cli -- list --limit 5 --page 1
+npm run cli -- list --limit 20 --only-reposts
+npm run cli -- list --limit 20 --only-originals
+```
+
+其中：
+
+- `--only-reposts` 用于直接查看最近转发过的微博。
+- `--only-originals` 用于只看自己原创微博。
+
+查看某条微博的评论：
+
+```bash
+npm run cli -- comments --weibo-id 1234567890123456 --limit 20 --page 1
+```
+
+发表评论：
+
+```bash
+npm run cli -- comment --weibo-id 1234567890123456 --text "收到，支持你"
+```
+
+点赞或取消点赞：
+
+```bash
+npm run cli -- like --weibo-id 1234567890123456
+npm run cli -- unlike --weibo-id 1234567890123456
+```
+
+删除自己发布的微博：
+
+```bash
+npm run cli -- delete --weibo-id 1234567890123456
 ```
 
 查询某条微博的转发：
@@ -179,7 +257,9 @@ npm run cli -- reposts --weibo-id 1234567890123456 --limit 20 --page 1
 
 - `login`：真实浏览器扫码成功，能提取并写回本地登录态
 - `post`：真实发布成功，并返回微博 ID、BID 和访问链接
+- `show`：可读取指定微博详情，并展示作者、正文与互动计数
 - `list`：能读取最近微博，并正确展示原创和转发内容
+- `comments`：可读取指定微博评论，并稳定区分空结果与接口错误
 - `reposts`：能查询指定微博转发；当无数据时返回稳定空结果提示
 - `login --from-env`：已验证可以使用环境变量中的 cookie/uid 重新写入本地登录态
 
@@ -187,42 +267,37 @@ npm run cli -- reposts --weibo-id 1234567890123456 --limit 20 --page 1
 
 ## Skills 规范
 
-当前仓库只提供 1 个总 skill，目录位于 [`skills/`](/Users/wedaren/repositoryDestinationOfGithub/agentic-weibo-cli/skills)：
+当前仓库只提供 1 个总 skill：根目录的 [SKILL.md](/Users/wedaren/.agents/skills/agentic-weibo-cli/SKILL.md)。
 
-- `weibo-cli`：统一处理微博登录、发微博、列微博、查转发
+- `agentic-weibo-cli`：统一处理微博登录、发微博、列微博、查转发
 
 这些文档既可以直接阅读，也可以通过 CLI 查看：
 
 ```bash
 npm run cli -- skills
-npm run cli -- skills show weibo-cli
+npm run cli -- skills show agentic-weibo-cli
 ```
 
-项目当前遵循 Agent Skills 与 `vercel-labs/skills` 的通用约定：
+项目当前遵循 Agent Skills 与 `vercel-labs/skills` 的通用约定，且仓库根目录就是 skill 根目录：
 
-- 每个 skill 是一个目录，至少包含一个 `SKILL.md`
+- 每个 skill 是一个可分发目录，至少包含一个 `SKILL.md`
 - `SKILL.md` 必须带 YAML frontmatter，至少包含 `name` 和 `description`
-- `name` 必须与父目录同名，例如 `skills/weibo-cli/SKILL.md` 对应 `name: weibo-cli`
+- `name` 必须与分发后的 skill 目录同名；如果要单独分发，建议目录名与 frontmatter 中的 `name` 保持一致
 - agent 可发现的信息以 `SKILL.md` 为唯一事实来源，CLI 不再在 TS 代码里手工重复维护一份元数据
-- 当前 skill 会优先通过相对路径调用自身目录下的 `scripts/weibo-cli`，不依赖仓库根目录的 `npm run cli -- ...`
-- 包装脚本会优先使用 `skills/weibo-cli/.venv/bin/python3`；若该虚拟环境不存在，则回退到系统 `python3`
+- 当前 skill 会优先通过相对路径调用自身目录下的 `scripts/weibo-cli`，不依赖 `npm run cli -- ...`
+- 包装脚本会优先使用根目录 `.venv/bin/python3`；若该虚拟环境不存在，则自动初始化运行环境
 
-如果你后续要扩展更多能力，优先在 `weibo-cli` 这个总 skill 中补充命令选择规则与 references；只有当新能力已经明显超出“微博 CLI 使用方法”这一边界时，再拆新的 skill。
+如果你后续要扩展更多能力，优先在 `agentic-weibo-cli` 这个总 skill 中补充命令选择规则与 references；只有当新能力已经明显超出“微博 CLI 使用方法”这一边界时，再拆新的 skill。
 
-### skill 目录中的 CLI 如何组织
+### skill 根目录中的 CLI 如何组织
 
-当前仓库采用“应用构建产物”和“skill 分发产物”分离：
+当前仓库采用“稳定包装入口 + Python 模块实现”分离：
 
-- `skills/weibo-cli/scripts/weibo_cli/`：Python 实现源码
-- `skills/weibo-cli/scripts/weibo-cli`：给 agent 调用的稳定包装入口
-- `skills/weibo-cli/.venv/`：skill 本地虚拟环境，安装 `requests` 与 `playwright`
+- `scripts/weibo_cli/`：Python 实现源码
+- `scripts/weibo-cli`：给 agent 调用的稳定包装入口
+- `.venv/`：skill 本地虚拟环境，安装 `requests` 与 `playwright`
 
-这个仓库里应保持以下边界：
-
-- `skills/`：skill 源文件、Python 实现、包装脚本和参考文档，给 agent 发现和按需加载
-- 根目录只保留仓库元数据与便捷脚本，不再承载 CLI 业务实现
-
-因此这里不再维护 `src/` 作为主实现目录，所有 CLI 业务实现都收敛到 `skills/weibo-cli/scripts/weibo_cli/`。
+这个仓库不再维护内层 skill 源目录；根目录自身就是唯一 skill，所有 CLI 业务实现都收敛到 `scripts/weibo_cli/`。
 
 ## MVP 验收命令
 

@@ -1,0 +1,41 @@
+{
+  "skill_name": "weibo-cli",
+  "evals": [
+    {
+      "id": 1,
+      "slug": "login-guidance",
+      "prompt": "我第一次用这个仓库，怎么登录微博？",
+      "expected_output": "明确说明应使用 weibo-cli skill，并给出 login 的正确调用方式、前置条件，以及本地登录态相关提示。",
+      "assertions": [
+        "输出明确提到 weibo-cli 或 scripts/weibo-cli 作为执行入口",
+        "输出使用 login 子命令，而不是 list、post 或 reposts",
+        "输出提到浏览器、登录态或 cookie 这类登录前置条件中的至少一项",
+        "输出没有把评论、点赞、粉丝或私信说成当前已支持能力"
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "list-recent-weibos",
+      "prompt": "帮我看下我最近 5 条微博怎么查。",
+      "expected_output": "给出查看最近微博的正确命令，包含 limit 参数，并在必要时提醒先完成登录。",
+      "assertions": [
+        "输出明确使用 list 子命令",
+        "输出包含 --limit 5，或给出等价的 limit=5 调用",
+        "输出没有误导用户使用 reposts 或 post",
+        "输出提醒需要先完成登录，或确认已有可用登录态"
+      ]
+    },
+    {
+      "id": 3,
+      "slug": "inspect-reposts",
+      "prompt": "我想看微博 1234567890123456 的转发，怎么弄？",
+      "expected_output": "给出 reposts 命令的正确调用方式，包含 weibo-id，并说明 limit 或 page 这类可选参数。",
+      "assertions": [
+        "输出明确使用 reposts 子命令",
+        "输出包含 --weibo-id 1234567890123456，或给出等价的 weibo-id 参数传递方式",
+        "输出提到 --limit 或 --page 至少一个可选参数",
+        "输出没有要求用户先补充微博 ID，因为 prompt 中已经提供了 ID"
+      ]
+    }
+  ]
+}

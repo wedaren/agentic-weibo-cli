@@ -1,11 +1,11 @@
 ## 结论（3 句话以内）
-当前仓库采用 Python + argparse + requests + Playwright 的组合实现微博 CLI，所有业务实现都收敛在单一 `weibo-cli` skill 目录中。根目录 `package.json` 只承担便捷脚本和 bin 暴露职责，真正稳定入口是 `skills/weibo-cli/scripts/weibo-cli`。依赖优先安装到 `skills/weibo-cli/.venv/`，配置优先环境变量，其次本地未提交配置文件。
+当前仓库采用 Python + argparse + requests + Playwright 的组合实现微博 CLI，所有业务实现都收敛在单一 `weibo-cli` 根级 skill 目录中。根目录 `package.json` 只承担便捷脚本和 bin 暴露职责，真正稳定入口是 `scripts/weibo-cli`。依赖优先安装到 `.venv/`，配置优先环境变量，其次本地未提交配置文件。
 
 ## 关键 API / 配置
 - argparse：用于注册 `login`、`post`、`list`、`reposts`、`skills` 子命令，并维持标准帮助输出。
 - requests：负责微博 HTTP 请求、cookie 注入、错误归一与基础限流。
 - Playwright（Python）：负责本地浏览器自动化登录和 cookie 抓取。
-- Python venv：通过 `skills/weibo-cli/.venv/` 隔离 skill 运行依赖，避免污染系统 Python。
+- Python venv：通过 `.venv/` 隔离 skill 运行依赖，避免污染系统 Python。
 - npm：保留 `npm run help`、`npm run cli -- ...`、`npm run skills:venv` 作为仓库级便捷入口。
 
 ## 注意事项

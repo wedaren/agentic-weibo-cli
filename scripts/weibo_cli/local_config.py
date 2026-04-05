@@ -9,7 +9,7 @@ from typing import Any
 
 
 def get_repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
+    return Path(__file__).resolve().parents[2]
 
 
 def get_local_data_dir() -> Path:
@@ -21,6 +21,13 @@ def get_local_data_dir() -> Path:
 
 def get_local_config_path() -> Path:
     return get_local_data_dir() / "weibo-session.json"
+
+
+def get_browser_profile_dir() -> Path:
+    configured_dir = os.environ.get("WEIBO_BROWSER_PROFILE_DIR", "").strip()
+    if configured_dir:
+        return Path(configured_dir).expanduser().resolve()
+    return get_local_data_dir() / "browser-profile"
 
 
 def read_local_config() -> dict[str, Any] | None:

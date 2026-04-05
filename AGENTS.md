@@ -2,7 +2,7 @@
 
 ## 一句话介绍
 
-面向个人账号的微博命令行工具，提供 CLI 命令与配套 skills 文档，支持扫码登录、发微博、列微博、查转发。
+面向个人账号的微博命令行工具，提供 CLI 命令与配套 skills 文档，支持扫码登录、发微博、看微博、查评论、查转发、评论、点赞、取消点赞、删除自己发布的微博。
 
 ## CLI 与 Skills
 
@@ -14,25 +14,25 @@ npm run help
 npm run cli -- skills
 
 # 查看某个 skill 文档
-npm run cli -- skills show weibo-cli
+npm run cli -- skills show agentic-weibo-cli
 
 # 初始化 Python 虚拟环境
 npm run skills:venv
 ```
 
-`skills/` 目录里的 `SKILL.md` 用于给 AI 代理和团队成员提供稳定操作说明；CLI 用于真正执行微博动作。
+根目录 `SKILL.md` 用于给 AI 代理和团队成员提供稳定操作说明；CLI 用于真正执行微博动作。
 
 ## Skills 约定
 
-- `skills/` 是当前仓库的 skill 源目录
-- 每个 skill 目录必须包含 `SKILL.md`，并使用 YAML frontmatter 声明 `name`、`description`
+- 当前仓库根目录本身就是 skill 源目录
+- 根目录必须包含 `SKILL.md`，并使用 YAML frontmatter 声明 `name`、`description`
 - 代理应先根据 `description` 判断是否需要加载 skill，再阅读 `SKILL.md` 正文执行步骤
 - 运行 `npm run cli -- skills prompt` 可输出 `<available_skills>` XML，供 agent 宿主注入上下文
 - 运行 `npm run cli -- skills validate` 可校验 skill 是否符合目录与 frontmatter 规范
-- 当前仓库收敛为单一 `weibo-cli` skill，skill 通过 `skills/weibo-cli/scripts/weibo-cli` 调用 skill 目录中的 Python 实现
-- 所有 CLI 业务实现均位于 `skills/weibo-cli/scripts/weibo_cli/`
-- `skills/weibo-cli/.venv/` 是 skill 本地虚拟环境，用于安装 `requests` 与 `playwright`
-- 包装脚本会优先使用 `skills/weibo-cli/.venv/bin/python3`，否则回退到系统 `python3`
+- 当前仓库收敛为单一 `agentic-weibo-cli` skill，skill 通过 `scripts/weibo-cli` 调用仓库中的 Python 实现
+- 所有 CLI 业务实现均位于 `scripts/weibo_cli/`
+- `.venv/` 是 skill 本地虚拟环境，用于安装 `requests` 与 `playwright`
+- 包装脚本会优先使用 `.venv/bin/python3`；若依赖缺失，会按 `requirements.txt` 自动初始化运行环境
 
 ## 启动
 
@@ -93,16 +93,14 @@ ls .agent/knowledge/                            # 知识积累
   instructions/
     *.instructions.md 仓库指令文件
 
-skills/
-  weibo-cli/
-    SKILL.md       微博 CLI 总 skill
-    .venv/         skill 本地虚拟环境（初始化后生成）
-    requirements.txt Python 运行依赖
-    scripts/
-      weibo-cli    agent 调用入口
-      weibo_cli/   Python 实现源码
-    references/
-      commands.md  子命令与参数说明
+SKILL.md          微博 CLI 总 skill
+.venv/            skill 本地虚拟环境（初始化后生成）
+requirements.txt  Python 运行依赖
+scripts/
+  weibo-cli       agent 调用入口
+  weibo_cli/      Python 实现源码
+references/
+  commands.md     子命令与参数说明
 
 tick.sh            MVP 阶段调度器
 evolve.sh          进化阶段调度器
