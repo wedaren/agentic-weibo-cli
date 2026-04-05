@@ -63,3 +63,31 @@ class WeiboActionResult:
     weibo_id: str
     message: str | None
     url: str | None
+
+
+@dataclass(slots=True)
+class UserProfile:
+    """用户主页基本信息。"""
+    uid: str
+    screen_name: str | None
+    description: str | None
+    followers_count: int | None
+    friends_count: int | None      # 关注数
+    statuses_count: int | None     # 微博数
+    verified: bool | None
+    verified_reason: str | None
+    location: str | None
+    profile_url: str | None
+
+
+@dataclass(slots=True)
+class FollowItem:
+    """关注列表或粉丝列表条目。"""
+    uid: str
+    screen_name: str | None
+    description: str | None
+    followers_count: int | None
+    friends_count: int | None
+    statuses_count: int | None
+    verified: bool | None
+    verified_reason: str | None

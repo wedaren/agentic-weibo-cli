@@ -7,7 +7,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import CommentItem, ListWeiboItem, PostWeiboResult, RepostItem, WeiboActionResult
+from .models import CommentItem, FollowItem, ListWeiboItem, PostWeiboResult, RepostItem, UserProfile, WeiboActionResult
 from .session import SessionStatus
 
 
@@ -170,4 +170,57 @@ def _format_comment_item(item: CommentItem, index: int) -> list[str]:
     if item.like_count is not None:
         lines.append(f"点赞: {item.like_count}")
     lines.append(item.text or "(空正文)")
+    return lines
+
+
+def format_user_profile(profile: UserProfile) -> str:
+    """格式化用户主页信息。"""
+    lines = [f"用户: {profile.screen_name or '未知用户'} ({profile.uid})"]
+    if profile.description:
+        lines.append(f"简介: {profile.description}")
+    if profile.location:
+        lines.append(f"地区: {profile.location}")
+    if profile.verified and profile.verified_reason:
+        lines.append(f"认证: {profile.verified_reason}")
+    elif profile.verified:
+        lines.append("认证: 已认证")
+    counts = []
+    if profile.followers_count is not None:
+        counts.append(f"粉丝 {profile.followers_count}")
+    if profile.friends_count is not None:
+        counts.append(f"关注 {profile.friends_count}")
+    if profile.statuses_count is not None:
+        counts.append(f"微博 {profile.statuses_count}")
+    if counts:
+        lines.append(" | ".join(counts))
+    if profile.profile_url:
+        lines.append(f"主页: {profile.profile_url}")
+    return "\n".join(lines) + "\n"
+
+
+def format_follow_list(items: list[FollowItem], *, label: str = "列表") -> str:
+    """格式化关注或粉丝列表。"""
+    if not items:
+        return f"暂无{label}记录。\n"
+    lines: list[str] = []
+    for index, item in enumerate(items, start=1):
+        lines.extend(_format_follow_item(item, index))
+    return "\n".join(lines) + "\n"
+
+
+def _format_follow_item(item: FollowItem, index: int) -> list[str]:
+    lines = [f"[{index}] {item.screen_name or '未知用户'} ({item.uid})"]
+    if item.description:
+        lines.append(f"  简介: {item.description}")
+    if item.verified and item.verified_reason:
+        lines.append(f"  认证: {item.verified_reason}")
+    counts = []
+    if item.followers_count is not None:
+        counts.append(f"粉丝 {item.followers_count}")
+    if item.friends_count is not None:
+        counts.append(f"关注 {item.friends_count}")
+    if item.statuses_count is not None:
+        counts.append(f"微博 {item.statuses_count}")
+    if counts:
+        lines.append(f"  {' | '.join(counts)}")
     return lines

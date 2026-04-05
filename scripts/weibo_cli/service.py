@@ -9,14 +9,24 @@ from __future__ import annotations
 
 from .api_client import WeiboApiClient
 from .auth import WeiboAuthService
+from .cache import DiskCache
+from .logger import get_logger
+
+log = get_logger(__name__)
+
+# 只读类操作的默认 TTL（秒）
+_TTL_USER = 600       # 用户信息 10 分钟
+_TTL_FOLLOW = 300     # 关注/粉丝列表 5 分钟
 
 # 以下导入同时也充当向后兼容的公开 re-export（测试文件与 output.py 从此处导入）
 from .models import (  # noqa: F401
     CommentItem,
+    FollowItem,
     ListWeiboItem,
     PostWeiboResult,
     RepostItem,
     RepostedStatus,
+    UserProfile,
     WeiboActionResult,
 )
 from .normalizers import (  # noqa: F401
@@ -25,12 +35,14 @@ from .normalizers import (  # noqa: F401
     extract_status_payload,
     is_no_data_message,
     normalize_comment,
+    normalize_follow_item,
     normalize_mblog,
     normalize_optional_number,
     normalize_optional_string,
     normalize_positive_integer,
     normalize_repost,
     normalize_required_text,
+    normalize_user_profile,
     stringify_id,
 )
 
@@ -39,6 +51,7 @@ class WeiboService:
     def __init__(self, client: WeiboApiClient):
         self.client = client
         self.resolved_uid: str | None = None
+        self._cache = DiskCache()
 
     @classmethod
     def create_default(cls) -> "WeiboService":
@@ -257,3 +270,113 @@ class WeiboService:
             )
         self.resolved_uid = probe.uid
         return probe.uid
+
+    # ------------------------------------------------------------------
+    # 用户信息
+    # ------------------------------------------------------------------
+
+    def get_user_profile(self, uid: str) -> UserProfile:
+        """查询任意用户的主页基本信息（含缓存）。"""
+        normalized_uid = normalize_required_text(uid, "uid")
+        cache_key = f"user_profile:{normalized_uid}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            log.debug("用户信息缓存命中: uid=%s", normalized_uid)
+            return UserProfile(**cached)
+
+        log.info("查询用户信息: uid=%s", normalized_uid)
+        response = self.client.request_json(
+            "/api/container/getIndex",
+            method="GET",
+            query={"type": "uid", "value": normalized_uid, "containerid": f"100505{normalized_uid}"},
+            headers={"referer": f"https://m.weibo.cn/u/{normalized_uid}"},
+        )
+        assert_api_success(response, "读取用户信息")
+        user_info = (response.get("data") or {}).get("userInfo") or {}
+        profile = normalize_user_profile(user_info)
+        if profile is None:
+            raise RuntimeError(f"用户信息接口未返回可解析的数据（uid={normalized_uid}）。")
+        self._cache.set(cache_key, {
+            "uid": profile.uid,
+            "screen_name": profile.screen_name,
+            "description": profile.description,
+            "followers_count": profile.followers_count,
+            "friends_count": profile.friends_count,
+            "statuses_count": profile.statuses_count,
+            "verified": profile.verified,
+            "verified_reason": profile.verified_reason,
+            "location": profile.location,
+            "profile_url": profile.profile_url,
+        }, ttl_sec=_TTL_USER)
+        return profile
+
+    # ------------------------------------------------------------------
+    # 关注 / 粉丝列表
+    # ------------------------------------------------------------------
+
+    def get_following(self, uid: str, page: int = 1) -> list[FollowItem]:
+        """获取指定用户的关注列表（含缓存）。"""
+        normalized_uid = normalize_required_text(uid, "uid")
+        normalized_page = normalize_positive_integer(page, "page")
+        cache_key = f"following:{normalized_uid}:page{normalized_page}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            log.debug("关注列表缓存命中: uid=%s page=%d", normalized_uid, normalized_page)
+            return [FollowItem(**item) for item in cached]
+
+        log.info("查询关注列表: uid=%s page=%d", normalized_uid, normalized_page)
+        items = self._fetch_follow_list(normalized_uid, "FOLLOW", normalized_page)
+        self._cache.set(cache_key, [
+            {
+                "uid": i.uid, "screen_name": i.screen_name, "description": i.description,
+                "followers_count": i.followers_count, "friends_count": i.friends_count,
+                "statuses_count": i.statuses_count, "verified": i.verified,
+                "verified_reason": i.verified_reason,
+            }
+            for i in items
+        ], ttl_sec=_TTL_FOLLOW)
+        return items
+
+    def get_followers(self, uid: str, page: int = 1) -> list[FollowItem]:
+        """获取指定用户的粉丝列表（含缓存）。"""
+        normalized_uid = normalize_required_text(uid, "uid")
+        normalized_page = normalize_positive_integer(page, "page")
+        cache_key = f"followers:{normalized_uid}:page{normalized_page}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            log.debug("粉丝列表缓存命中: uid=%s page=%d", normalized_uid, normalized_page)
+            return [FollowItem(**item) for item in cached]
+
+        log.info("查询粉丝列表: uid=%s page=%d", normalized_uid, normalized_page)
+        items = self._fetch_follow_list(normalized_uid, "FANS", normalized_page)
+        self._cache.set(cache_key, [
+            {
+                "uid": i.uid, "screen_name": i.screen_name, "description": i.description,
+                "followers_count": i.followers_count, "friends_count": i.friends_count,
+                "statuses_count": i.statuses_count, "verified": i.verified,
+                "verified_reason": i.verified_reason,
+            }
+            for i in items
+        ], ttl_sec=_TTL_FOLLOW)
+        return items
+
+    def _fetch_follow_list(self, uid: str, kind: str, page: int) -> list[FollowItem]:
+        """公共内部方法，拉取关注(FOLLOW)或粉丝(FANS)列表。"""
+        response = self.client.request_json(
+            "/api/container/getIndex",
+            method="GET",
+            query={"type": "uid", "value": uid, "containerid": f"231051{uid}_-_{kind}", "page": page},
+            headers={"referer": f"https://m.weibo.cn/u/{uid}"},
+        )
+        if response.get("ok") == 0 and is_no_data_message(response.get("msg") or response.get("message")):
+            return []
+        assert_api_success(response, f"读取{'关注' if kind == 'FOLLOW' else '粉丝'}列表")
+        cards = (response.get("data") or {}).get("cards") or []
+        users: list[FollowItem] = []
+        for card in cards:
+            # 用户条目可能在 card 顶层或 card_group 里
+            for user_raw in ([card.get("user")] if card.get("user") else []) + (card.get("card_group") or []):
+                item = normalize_follow_item(user_raw if isinstance(user_raw, dict) and user_raw.get("id") else (user_raw.get("user") if isinstance(user_raw, dict) else None))
+                if item:
+                    users.append(item)
+        return users

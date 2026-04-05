@@ -12,13 +12,15 @@
 
 ## 总体分层
 
-当前实现可以按五层理解：
+当前实现可以按七层理解（新增两个横切层，不破坏原有分层）：
 
 1. 入口层：命令解析与输出分发
 2. 鉴权层：登录态检查、登录流程编排、持久化入口
 3. 传输层：微博 HTTP 请求、请求头构造、响应鉴权判定、运行时 cookie 合并
-4. 领域层：发微博、列微博、查转发等业务动作与数据归一
+4. 领域层：发微博、列微博、查转发、关注/粉丝、用户信息等业务动作与数据归一
 5. 存储层：本地 session 文件、浏览器 profile 路径、cookie 模型与序列化
+6. **缓存层（横切）**：磁盘 TTL 缓存，供领域层只读操作复用，减少重复网络请求
+7. **日志层（横切）**：统一结构化日志，各层通过 `get_logger(__name__)` 接入
 
 ## 模块职责
 
@@ -60,8 +62,27 @@
   - `post_weibo()`：发布微博
   - `list_own_weibos()`：读取个人微博列表
   - `get_reposts()`：读取指定微博转发
+  - `get_user_profile(uid)`：查询任意用户主页信息（有缓存）
+  - `get_following(uid, page)`：读取关注列表（有缓存）
+  - `get_followers(uid, page)`：读取粉丝列表（有缓存）
   - 负责把微博接口原始 JSON 归一成稳定的数据对象
   - 负责把 HTML 正文转成纯文本
+
+### 缓存层（横切）
+
+- `scripts/weibo_cli/cache.py`
+  - `DiskCache`：基于 `.local/cache/` 磁盘文件的 TTL 缓存
+  - 仅供只读操作（用户信息 10 min、关注/粉丝列表 5 min）
+  - 写动作（发微博、评论、点赞、取消点赞、删除）不使用缓存
+  - `WEIBO_CACHE_DISABLED=1` 可完全禁用（单测或调试用）
+
+### 日志层（横切）
+
+- `scripts/weibo_cli/logger.py`
+  - `get_logger(name)`：统一 logger 工厂，各模块传入 `__name__` 即可
+  - 日志写入 `.local/logs/weibo-cli.log`，自动轮转（2 MB × 3 份）
+  - 默认 WARNING 级别；`WEIBO_LOG_LEVEL=DEBUG` 开启详细日志（同时输出 stderr）
+  - 屏蔽 `urllib3`、`requests`、`playwright` 的噪音日志
 
 ### 存储层
 

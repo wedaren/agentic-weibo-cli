@@ -144,3 +144,45 @@ scripts/weibo-cli delete --weibo-id 1234567890123456 --json
 ```
 
 要求：只在用户明确要求删除时执行；删除属于不可逆操作，执行前应再次确认目标微博 ID。
+
+## 查看用户信息
+
+```bash
+scripts/weibo-cli user --uid <UID>
+scripts/weibo-cli user --uid <UID> --json
+```
+
+参数：
+- `--uid`（必填）：目标用户的 UID
+
+返回字段（JSON 时）：uid、screen_name、description、location、followers_count、friends_count、statuses_count、verified、verified_reason、profile_url
+
+结果来自本地 TTL 缓存（10 分钟），重复查询同一用户不会重复请求网络。
+
+## 查看关注列表
+
+```bash
+scripts/weibo-cli following
+scripts/weibo-cli following --uid <UID>
+scripts/weibo-cli following --uid <UID> --page 2 --json
+```
+
+参数：
+- `--uid`（可选）：目标用户 UID；不填则查询当前登录账号
+- `--page`（可选，默认 1）：翻页
+
+结果来自本地 TTL 缓存（5 分钟）。
+
+## 查看粉丝列表
+
+```bash
+scripts/weibo-cli followers
+scripts/weibo-cli followers --uid <UID>
+scripts/weibo-cli followers --uid <UID> --page 2 --json
+```
+
+参数：
+- `--uid`（可选）：目标用户 UID；不填则查询当前登录账号
+- `--page`（可选，默认 1）：翻页
+
+结果来自本地 TTL 缓存（5 分钟）。

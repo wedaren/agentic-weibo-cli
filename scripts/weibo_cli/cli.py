@@ -15,7 +15,7 @@ from .auth import LoginResult, WeiboAuthService
 from .api_client import WeiboApiError, WeiboAuthError, WeiboNetworkError
 from .browser_login import DEFAULT_LOGIN_URL, assert_browser_automation_available, run_browser_login
 from .local_config import get_local_config_path
-from .output import format_action_result, format_comment_result, format_comments, format_json_output, format_post_result, format_reposts, format_session_status, format_weibo_detail, format_weibo_list
+from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_post_result, format_reposts, format_session_status, format_user_profile, format_weibo_detail, format_weibo_list
 from .service import WeiboService
 from .session import SessionData, SessionStatus
 from .skill_catalog import format_skill_document, format_skill_list, format_skill_prompt_xml, format_skill_validation, load_skills
@@ -118,6 +118,20 @@ def build_parser() -> argparse.ArgumentParser:
     reposts_parser.add_argument("--limit", default="20")
     reposts_parser.add_argument("--page", default="1")
     reposts_parser.set_defaults(handler=handle_reposts)
+
+    user_parser = subparsers.add_parser("user", help="查看指定用户的主页信息", parents=[common_parser])
+    user_parser.add_argument("--uid", required=True, help="目标用户的 UID")
+    user_parser.set_defaults(handler=handle_user)
+
+    following_parser = subparsers.add_parser("following", help="查看指定用户的关注列表", parents=[common_parser])
+    following_parser.add_argument("--uid", help="目标用户 UID；不填则查询当前登录账号")
+    following_parser.add_argument("--page", default="1")
+    following_parser.set_defaults(handler=handle_following)
+
+    followers_parser = subparsers.add_parser("followers", help="查看指定用户的粉丝列表", parents=[common_parser])
+    followers_parser.add_argument("--uid", help="目标用户 UID；不填则查询当前登录账号")
+    followers_parser.add_argument("--page", default="1")
+    followers_parser.set_defaults(handler=handle_followers)
 
     skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills", parents=[common_parser])
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
@@ -317,6 +331,9 @@ def handle_show(args: argparse.Namespace) -> int:
 def handle_list(args: argparse.Namespace) -> int:
     if args.only_reposts and args.only_originals:
         raise CliUsageError("--only-reposts 和 --only-originals 不能同时使用。")
+    # 提前做参数合法性校验，避免 auth 流程之后才触发 usage error
+    limit = parse_positive_integer_option(args.limit, "--limit")
+    page = parse_positive_integer_option(args.page, "--page")
     try:
         service = WeiboService.create_default()
     except WeiboAuthError:
@@ -325,10 +342,7 @@ def handle_list(args: argparse.Namespace) -> int:
         if service is None:
             return int(ExitCode.AUTH)
 
-    items_all = service.list_own_weibos(
-        limit=parse_positive_integer_option(args.limit, "--limit"),
-        page=parse_positive_integer_option(args.page, "--page"),
-    )
+    items_all = service.list_own_weibos(limit=limit, page=page)
 
     if args.only_reposts:
         repost_items = [item for item in items_all if item.reposted_status is not None]
@@ -362,10 +376,10 @@ def handle_list(args: argparse.Namespace) -> int:
 
 
 def handle_comments(args: argparse.Namespace) -> int:
+    limit = parse_positive_integer_option(args.limit, "--limit")
+    page = parse_positive_integer_option(args.page, "--page")
     items = WeiboService.create_default().get_comments(
-        weibo_id=args.weibo_id,
-        limit=parse_positive_integer_option(args.limit, "--limit"),
-        page=parse_positive_integer_option(args.page, "--page"),
+        weibo_id=args.weibo_id, limit=limit, page=page,
     )
     write_command_output(args, {"items": items}, text_output=format_comments(items))
     return 0
@@ -396,12 +410,40 @@ def handle_delete(args: argparse.Namespace) -> int:
 
 
 def handle_reposts(args: argparse.Namespace) -> int:
+    limit = parse_positive_integer_option(args.limit, "--limit")
+    page = parse_positive_integer_option(args.page, "--page")
     items = WeiboService.create_default().get_reposts(
-        weibo_id=args.weibo_id,
-        limit=parse_positive_integer_option(args.limit, "--limit"),
-        page=parse_positive_integer_option(args.page, "--page"),
+        weibo_id=args.weibo_id, limit=limit, page=page,
     )
     write_command_output(args, {"items": items}, text_output=format_reposts(items))
+    return 0
+
+
+def handle_user(args: argparse.Namespace) -> int:
+    uid = (args.uid or "").strip()
+    if not uid:
+        raise CliUsageError("--uid 不能为空。")
+    svc = WeiboService.create_default()
+    profile = svc.get_user_profile(uid)
+    write_command_output(args, profile, text_output=format_user_profile(profile))
+    return 0
+
+
+def handle_following(args: argparse.Namespace) -> int:
+    svc = WeiboService.create_default()
+    uid = (args.uid or "").strip() or svc.resolve_uid()
+    page = parse_positive_integer_option(args.page, "--page")
+    items = svc.get_following(uid, page=page)
+    write_command_output(args, {"uid": uid, "page": page, "items": items}, text_output=format_follow_list(items, label="关注"))
+    return 0
+
+
+def handle_followers(args: argparse.Namespace) -> int:
+    svc = WeiboService.create_default()
+    uid = (args.uid or "").strip() or svc.resolve_uid()
+    page = parse_positive_integer_option(args.page, "--page")
+    items = svc.get_followers(uid, page=page)
+    write_command_output(args, {"uid": uid, "page": page, "items": items}, text_output=format_follow_list(items, label="粉丝"))
     return 0
 
 

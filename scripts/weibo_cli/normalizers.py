@@ -10,7 +10,7 @@ import html
 import re
 from typing import Any
 
-from .models import CommentItem, ListWeiboItem, RepostItem, RepostedStatus
+from .models import CommentItem, FollowItem, ListWeiboItem, RepostItem, RepostedStatus, UserProfile
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,10 @@ def assert_api_success(response: dict[str, Any], action_name: str) -> None:
 
 def is_no_data_message(message: str | None) -> bool:
     normalized = normalize_optional_string(message)
-    return normalized is not None and "还没有人转发过" in normalized
+    if normalized is None:
+        return False
+    no_data_phrases = ("还没有人转发过", "没有更多数据了", "暂无数据", "no data")
+    return any(phrase in normalized for phrase in no_data_phrases)
 
 
 # ---------------------------------------------------------------------------
@@ -196,4 +199,41 @@ def normalize_comment(raw: dict[str, Any] | None) -> CommentItem | None:
         like_count=normalize_optional_number(
             (raw or {}).get("like_counts") or (raw or {}).get("like_count")
         ),
+    )
+
+
+def normalize_user_profile(raw: dict[str, Any] | None) -> UserProfile | None:
+    """将 API 返回的用户信息字典解析为 UserProfile。"""
+    uid = stringify_id((raw or {}).get("id"))
+    if not uid:
+        return None
+    return UserProfile(
+        uid=uid,
+        screen_name=normalize_optional_string((raw or {}).get("screen_name")),
+        description=normalize_optional_string((raw or {}).get("description")),
+        followers_count=normalize_optional_number((raw or {}).get("followers_count")),
+        friends_count=normalize_optional_number((raw or {}).get("friends_count")),
+        statuses_count=normalize_optional_number((raw or {}).get("statuses_count")),
+        verified=bool((raw or {}).get("verified")) if (raw or {}).get("verified") is not None else None,
+        verified_reason=normalize_optional_string((raw or {}).get("verified_reason")),
+        location=normalize_optional_string((raw or {}).get("location")),
+        profile_url=normalize_optional_string((raw or {}).get("profile_url"))
+            or (f"https://m.weibo.cn/u/{uid}" if uid else None),
+    )
+
+
+def normalize_follow_item(raw: dict[str, Any] | None) -> FollowItem | None:
+    """将关注/粉丝列表条目解析为 FollowItem。"""
+    uid = stringify_id((raw or {}).get("id"))
+    if not uid:
+        return None
+    return FollowItem(
+        uid=uid,
+        screen_name=normalize_optional_string((raw or {}).get("screen_name")),
+        description=normalize_optional_string((raw or {}).get("description")),
+        followers_count=normalize_optional_number((raw or {}).get("followers_count")),
+        friends_count=normalize_optional_number((raw or {}).get("friends_count")),
+        statuses_count=normalize_optional_number((raw or {}).get("statuses_count")),
+        verified=bool((raw or {}).get("verified")) if (raw or {}).get("verified") is not None else None,
+        verified_reason=normalize_optional_string((raw or {}).get("verified_reason")),
     )

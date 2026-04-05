@@ -513,5 +513,172 @@ class LongTextTests(unittest.TestCase):
         self.assertEqual(item.text, "普通短文")
 
 
+class DiskCacheTests(unittest.TestCase):
+    """DiskCache 基本行为单元测试（依赖环境变量禁用不影响）。"""
+
+    def setUp(self) -> None:
+        import os
+        import tempfile
+        self._orig_disabled = os.environ.get("WEIBO_CACHE_DISABLED")
+        # 测试中强制启用缓存，使用临时目录
+        os.environ.pop("WEIBO_CACHE_DISABLED", None)
+        self._tmpdir = tempfile.TemporaryDirectory()
+        import weibo_cli.cache as cache_mod
+        self._orig_cache_dir = cache_mod._cache_dir
+        cache_mod._cache_dir = lambda: self._get_tmp_cache_dir()
+
+    def _get_tmp_cache_dir(self):
+        from pathlib import Path
+        p = Path(self._tmpdir.name) / "cache"
+        p.mkdir(exist_ok=True)
+        return p
+
+    def tearDown(self) -> None:
+        import os
+        import weibo_cli.cache as cache_mod
+        cache_mod._cache_dir = self._orig_cache_dir
+        self._tmpdir.cleanup()
+        if self._orig_disabled is not None:
+            os.environ["WEIBO_CACHE_DISABLED"] = self._orig_disabled
+        else:
+            os.environ.pop("WEIBO_CACHE_DISABLED", None)
+
+    def test_set_and_get_returns_value(self) -> None:
+        from weibo_cli.cache import DiskCache
+        cache = DiskCache(ttl_sec=60)
+        cache.set("test_key", {"value": 42})
+        result = cache.get("test_key")
+        self.assertEqual(result, {"value": 42})
+
+    def test_get_returns_none_for_missing_key(self) -> None:
+        from weibo_cli.cache import DiskCache
+        cache = DiskCache(ttl_sec=60)
+        self.assertIsNone(cache.get("nonexistent"))
+
+    def test_expired_entry_returns_none(self) -> None:
+        from weibo_cli.cache import DiskCache
+        cache = DiskCache(ttl_sec=0)
+        cache.set("expired_key", "data", ttl_sec=-1)
+        self.assertIsNone(cache.get("expired_key"))
+
+    def test_invalidate_removes_entry(self) -> None:
+        from weibo_cli.cache import DiskCache
+        cache = DiskCache(ttl_sec=60)
+        cache.set("del_key", "val")
+        cache.invalidate("del_key")
+        self.assertIsNone(cache.get("del_key"))
+
+    def test_clear_removes_all_entries(self) -> None:
+        from weibo_cli.cache import DiskCache
+        cache = DiskCache(ttl_sec=60)
+        cache.set("k1", 1)
+        cache.set("k2", 2)
+        count = cache.clear()
+        self.assertGreaterEqual(count, 2)
+        self.assertIsNone(cache.get("k1"))
+
+
+class FollowServiceTests(unittest.TestCase):
+    """关注/粉丝/用户信息 service 层单元测试。"""
+
+    def _make_service(self, response: dict) -> "WeiboService":
+        import os
+        os.environ["WEIBO_CACHE_DISABLED"] = "1"
+        client = FakeClient(response)
+        client.session = SimpleNamespace(uid="123456")  # type: ignore[attr-defined]
+        return WeiboService(client)
+
+    def tearDown(self) -> None:
+        import os
+        os.environ.pop("WEIBO_CACHE_DISABLED", None)
+
+    def test_get_user_profile_returns_profile(self) -> None:
+        response = {
+            "ok": 1,
+            "data": {
+                "userInfo": {
+                    "id": "999",
+                    "screen_name": "测试用户",
+                    "description": "简介内容",
+                    "followers_count": 100,
+                    "friends_count": 50,
+                    "statuses_count": 200,
+                    "verified": True,
+                    "verified_reason": "官方认证",
+                    "location": "北京",
+                }
+            },
+        }
+        svc = self._make_service(response)
+        profile = svc.get_user_profile("999")
+        self.assertEqual(profile.uid, "999")
+        self.assertEqual(profile.screen_name, "测试用户")
+        self.assertEqual(profile.followers_count, 100)
+        self.assertTrue(profile.verified)
+
+    def test_get_following_returns_follow_items(self) -> None:
+        response = {
+            "ok": 1,
+            "data": {
+                "cards": [
+                    {"user": {"id": "111", "screen_name": "关注者A", "followers_count": 10, "friends_count": 5, "statuses_count": 20}},
+                ]
+            },
+        }
+        svc = self._make_service(response)
+        items = svc.get_following("123456", page=1)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].uid, "111")
+        self.assertEqual(items[0].screen_name, "关注者A")
+
+    def test_get_followers_returns_empty_for_no_data(self) -> None:
+        response = {"ok": 0, "msg": "没有更多数据了"}
+        svc = self._make_service(response)
+        items = svc.get_followers("123456", page=1)
+        self.assertEqual(items, [])
+
+
+class FollowOutputTests(unittest.TestCase):
+    """输出层格式化测试。"""
+
+    def test_format_user_profile(self) -> None:
+        from weibo_cli.models import UserProfile
+        from weibo_cli.output import format_user_profile
+        profile = UserProfile(
+            uid="123",
+            screen_name="测试用户",
+            description="简介",
+            followers_count=100,
+            friends_count=50,
+            statuses_count=200,
+            verified=True,
+            verified_reason="官方认证",
+            location="北京",
+            profile_url="https://m.weibo.cn/u/123",
+        )
+        text = format_user_profile(profile)
+        self.assertIn("测试用户", text)
+        self.assertIn("粉丝 100", text)
+        self.assertIn("官方认证", text)
+
+    def test_format_follow_list_empty(self) -> None:
+        from weibo_cli.output import format_follow_list
+        text = format_follow_list([], label="关注")
+        self.assertIn("暂无关注记录", text)
+
+    def test_format_follow_list_items(self) -> None:
+        from weibo_cli.models import FollowItem
+        from weibo_cli.output import format_follow_list
+        items = [FollowItem(
+            uid="111", screen_name="用户A", description="简介A",
+            followers_count=10, friends_count=5, statuses_count=20,
+            verified=False, verified_reason=None,
+        )]
+        text = format_follow_list(items, label="粉丝")
+        self.assertIn("用户A", text)
+        self.assertIn("111", text)
+        self.assertIn("粉丝 10", text)
+
+
 if __name__ == "__main__":
     unittest.main()

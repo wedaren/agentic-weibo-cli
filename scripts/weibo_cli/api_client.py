@@ -10,6 +10,9 @@ from typing import Any
 import requests
 
 from .session import CookieRecord, SessionData, SessionStore, merge_cookies, now_iso, normalize_optional
+from .logger import get_logger
+
+log = get_logger(__name__)
 
 
 class WeiboApiError(RuntimeError):
@@ -98,6 +101,7 @@ class WeiboApiClient:
     ) -> requests.Response:
         self.wait_for_rate_limit()
         url = self.build_url(path, query)
+        log.debug("HTTP %s %s", method, url)
         try:
             response = self.http.request(
                 method=method,
@@ -108,10 +112,12 @@ class WeiboApiClient:
                 timeout=30,
             )
         except requests.RequestException as error:
+            log.warning("网络请求失败: %s %s — %s", method, url, error)
             raise WeiboNetworkError(
                 f"微博接口网络请求失败：{error}",
                 url,
             ) from error
+        log.debug("HTTP %d %s", response.status_code, url)
         self.last_request_at = time.time()
         self._merge_response_cookies(response.cookies)
 
