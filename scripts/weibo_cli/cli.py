@@ -39,6 +39,7 @@ class ErrorDescriptor:
     exit_code: int
     category: str
     message: str
+    next_action: str | None = None
 
 
 def build_common_parser() -> argparse.ArgumentParser:
@@ -200,7 +201,7 @@ def classify_error(error: Exception) -> ErrorDescriptor:
     if isinstance(error, CliUsageError):
         return ErrorDescriptor(exit_code=int(ExitCode.USAGE), category="usage", message=str(error))
     if isinstance(error, WeiboAuthError):
-        return ErrorDescriptor(exit_code=int(ExitCode.AUTH), category="auth", message=str(error))
+        return ErrorDescriptor(exit_code=int(ExitCode.AUTH), category="auth", message=str(error), next_action="login")
     if isinstance(error, WeiboNetworkError):
         return ErrorDescriptor(exit_code=int(ExitCode.NETWORK), category="network", message=str(error))
     if isinstance(error, WeiboApiError):
@@ -213,20 +214,15 @@ def classify_error(error: Exception) -> ErrorDescriptor:
 def write_error_output(error: Exception, *, json_output: bool) -> int:
     descriptor = classify_error(error)
     if json_output:
+        error_obj: dict = {
+            "category": descriptor.category,
+            "exit_code": descriptor.exit_code,
+            "message": descriptor.message,
+        }
+        if descriptor.next_action is not None:
+            error_obj["next_action"] = descriptor.next_action
         sys.stderr.write(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": {
-                        "category": descriptor.category,
-                        "exit_code": descriptor.exit_code,
-                        "message": descriptor.message,
-                    },
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n"
+            json.dumps({"ok": False, "error": error_obj}, ensure_ascii=False, indent=2) + "\n"
         )
         return descriptor.exit_code
     sys.stderr.write(f"{descriptor.message}\n")
