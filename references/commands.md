@@ -163,13 +163,17 @@ scripts/weibo-cli user --uid <UID> --json
 
 ```bash
 scripts/weibo-cli following
-scripts/weibo-cli following --uid <UID>
+scripts/weibo-cli following --all-pages --json
+scripts/weibo-cli following --uid <UID> --all-pages --json
 scripts/weibo-cli following --uid <UID> --page 2 --json
 ```
 
 参数：
 - `--uid`（可选）：目标用户 UID；不填则查询当前登录账号
-- `--page`（可选，默认 1）：翻页
+- `--all-pages`（可选）：自动翻页拉取全量关注列表（**agent 优先使用此选项**，避免手动循环翻页）
+- `--page`（可选，默认 1）：单页翻页，不与 `--all-pages` 同时使用
+
+返回字段（`--json` 时）：uid、items、has_more（单页时，len(items)==20 推断为 true）；`--all-pages` 时还包含 total、all_pages=true、has_more=false
 
 结果来自本地 TTL 缓存（5 分钟）。
 
@@ -196,12 +200,16 @@ scripts/weibo-cli search --keyword karpathy --page 2 --json
 
 ```bash
 scripts/weibo-cli followers
-scripts/weibo-cli followers --uid <UID>
+scripts/weibo-cli followers --all-pages --json
+scripts/weibo-cli followers --uid <UID> --all-pages --json
 scripts/weibo-cli followers --uid <UID> --page 2 --json
 ```
 
 参数：
 - `--uid`（可选）：目标用户 UID；不填则查询当前登录账号
-- `--page`（可选，默认 1）：翻页
+- `--all-pages`（可选）：自动翻页拉取全量粉丝列表（**agent 优先使用此选项**）
+- `--page`（可选，默认 1）：单页翻页，不与 `--all-pages` 同时使用
+
+返回字段（`--json` 时）：uid、items、has_more；`--all-pages` 时还包含 total、all_pages=true
 
 结果来自本地 TTL 缓存（5 分钟）。

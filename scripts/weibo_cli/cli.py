@@ -125,12 +125,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     following_parser = subparsers.add_parser("following", help="查看指定用户的关注列表", parents=[common_parser])
     following_parser.add_argument("--uid", help="目标用户 UID；不填则查询当前登录账号")
-    following_parser.add_argument("--page", default="1")
+    following_parser.add_argument("--page", default="1", help="页码（默认 1）；--all-pages 时忽略")
+    following_parser.add_argument("--all-pages", action="store_true", help="自动翻页拉取全量关注列表（agent 推荐使用）")
     following_parser.set_defaults(handler=handle_following)
 
     followers_parser = subparsers.add_parser("followers", help="查看指定用户的粉丝列表", parents=[common_parser])
     followers_parser.add_argument("--uid", help="目标用户 UID；不填则查询当前登录账号")
-    followers_parser.add_argument("--page", default="1")
+    followers_parser.add_argument("--page", default="1", help="页码（默认 1）；--all-pages 时忽略")
+    followers_parser.add_argument("--all-pages", action="store_true", help="自动翻页拉取全量粉丝列表（agent 推荐使用）")
     followers_parser.set_defaults(handler=handle_followers)
 
     search_parser = subparsers.add_parser("search", help="按关键词搜索微博", parents=[common_parser])
@@ -439,18 +441,36 @@ def handle_user(args: argparse.Namespace) -> int:
 def handle_following(args: argparse.Namespace) -> int:
     svc = WeiboService.create_default()
     uid = (args.uid or "").strip() or svc.resolve_uid()
-    page = parse_positive_integer_option(args.page, "--page")
-    items = svc.get_following(uid, page=page)
-    write_command_output(args, {"uid": uid, "page": page, "items": items}, text_output=format_follow_list(items, label="关注"))
+    if args.all_pages:
+        items = svc.get_following_all(uid)
+        has_more = False
+        payload = {"uid": uid, "all_pages": True, "total": len(items), "has_more": has_more, "items": items}
+        text = format_follow_list(items, label="关注", total=len(items), has_more=has_more)
+    else:
+        page = parse_positive_integer_option(args.page, "--page")
+        items = svc.get_following(uid, page=page)
+        has_more = len(items) == 20
+        payload = {"uid": uid, "page": page, "has_more": has_more, "items": items}
+        text = format_follow_list(items, label="关注", has_more=has_more)
+    write_command_output(args, payload, text_output=text)
     return 0
 
 
 def handle_followers(args: argparse.Namespace) -> int:
     svc = WeiboService.create_default()
     uid = (args.uid or "").strip() or svc.resolve_uid()
-    page = parse_positive_integer_option(args.page, "--page")
-    items = svc.get_followers(uid, page=page)
-    write_command_output(args, {"uid": uid, "page": page, "items": items}, text_output=format_follow_list(items, label="粉丝"))
+    if args.all_pages:
+        items = svc.get_followers_all(uid)
+        has_more = False
+        payload = {"uid": uid, "all_pages": True, "total": len(items), "has_more": has_more, "items": items}
+        text = format_follow_list(items, label="粉丝", total=len(items), has_more=has_more)
+    else:
+        page = parse_positive_integer_option(args.page, "--page")
+        items = svc.get_followers(uid, page=page)
+        has_more = len(items) == 20
+        payload = {"uid": uid, "page": page, "has_more": has_more, "items": items}
+        text = format_follow_list(items, label="粉丝", has_more=has_more)
+    write_command_output(args, payload, text_output=text)
     return 0
 
 

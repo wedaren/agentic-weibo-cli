@@ -223,13 +223,20 @@ def _format_search_item(item: ListWeiboItem, index: int) -> list[str]:
     return lines
 
 
-def format_follow_list(items: list[FollowItem], *, label: str = "列表") -> str:
-    """格式化关注或粉丝列表。"""
+def format_follow_list(items: list[FollowItem], *, label: str = "列表", has_more: bool = False, total: int | None = None) -> str:
+    """格式化关注或粉丝列表。
+
+    has_more=True 时末尾追加翻页提示；total 非 None 时显示合计条数（全量拉取时使用）。
+    """
     if not items:
         return f"未获取到{label}记录（列表可能为空，或该用户已将{label}设为仅自己可见）。\n"
     lines: list[str] = []
     for index, item in enumerate(items, start=1):
         lines.extend(_format_follow_item(item, index))
+    if total is not None:
+        lines.append(f"\n共 {total} 条{label}记录（全量）。")
+    elif has_more:
+        lines.append(f"\n当前显示 {len(items)} 条，可能还有更多。使用 --all-pages 一次性拉取全量，或追加 --page N 翻页。")
     return "\n".join(lines) + "\n"
 
 

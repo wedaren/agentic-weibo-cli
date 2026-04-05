@@ -317,7 +317,7 @@ class WeiboService:
     # ------------------------------------------------------------------
 
     def get_following(self, uid: str, page: int = 1) -> list[FollowItem]:
-        """获取指定用户的关注列表（含缓存）。"""
+        """获取指定用户的关注列表（含缓存）。每次返回约 20 条；使用 get_following_all 可一次拉全量。"""
         normalized_uid = normalize_required_text(uid, "uid")
         normalized_page = normalize_positive_integer(page, "page")
         cache_key = f"following:{normalized_uid}:page{normalized_page}"
@@ -339,8 +339,22 @@ class WeiboService:
         ], ttl_sec=_TTL_FOLLOW)
         return items
 
+    def get_following_all(self, uid: str, *, max_pages: int = 50) -> list[FollowItem]:
+        """一次性拉取全量关注列表（自动翻页，上限 max_pages 页 × 20 条/页）。
+
+        供 agent 直接使用，无需自行循环翻页。
+        """
+        normalized_uid = normalize_required_text(uid, "uid")
+        all_items: list[FollowItem] = []
+        for page in range(1, max_pages + 1):
+            batch = self.get_following(normalized_uid, page=page)
+            all_items.extend(batch)
+            if len(batch) < 20:  # 不足 20 条，已到最后一页
+                break
+        return all_items
+
     def get_followers(self, uid: str, page: int = 1) -> list[FollowItem]:
-        """获取指定用户的粉丝列表（含缓存）。"""
+        """获取指定用户的粉丝列表（含缓存）。每次返回约 20 条；使用 get_followers_all 可一次拉全量。"""
         normalized_uid = normalize_required_text(uid, "uid")
         normalized_page = normalize_positive_integer(page, "page")
         cache_key = f"followers:{normalized_uid}:page{normalized_page}"
@@ -361,6 +375,20 @@ class WeiboService:
             for i in items
         ], ttl_sec=_TTL_FOLLOW)
         return items
+
+    def get_followers_all(self, uid: str, *, max_pages: int = 50) -> list[FollowItem]:
+        """一次性拉取全量粉丝列表（自动翻页，上限 max_pages 页 × 20 条/页）。
+
+        供 agent 直接使用，无需自行循环翻页。
+        """
+        normalized_uid = normalize_required_text(uid, "uid")
+        all_items: list[FollowItem] = []
+        for page in range(1, max_pages + 1):
+            batch = self.get_followers(normalized_uid, page=page)
+            all_items.extend(batch)
+            if len(batch) < 20:  # 不足 20 条，已到最后一页
+                break
+        return all_items
 
     # ------------------------------------------------------------------
     # 搜索
