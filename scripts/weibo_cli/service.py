@@ -93,15 +93,15 @@ class WeiboService:
             url=f"https://m.weibo.cn/status/{bid}" if bid else None,
         )
 
-    def list_own_weibos(self, limit: int, page: int) -> list[ListWeiboItem]:
+    def list_own_weibos(self, limit: int, page: int, uid: str | None = None) -> list[ListWeiboItem]:
         normalized_limit = normalize_positive_integer(limit, "limit")
         normalized_page = normalize_positive_integer(page, "page")
-        uid = self.resolve_uid()
+        target_uid = normalize_required_text(uid, "uid") if uid else self.resolve_uid()
         response = self.client.request_json(
             "/api/container/getIndex",
             method="GET",
-            query={"type": "uid", "value": uid, "containerid": f"107603{uid}", "page": normalized_page},
-            headers={"referer": f"https://m.weibo.cn/u/{uid}"},
+            query={"type": "uid", "value": target_uid, "containerid": f"107603{target_uid}", "page": normalized_page},
+            headers={"referer": f"https://m.weibo.cn/u/{target_uid}"},
         )
         cards = ((response.get("data") or {}).get("cards") or [])
         if response.get("ok") == 0 and not cards:

@@ -176,7 +176,7 @@ class CliExtensionTests(unittest.TestCase):
             ),
         ]
         fake_service = SimpleNamespace(
-            list_own_weibos=lambda limit, page: items,
+            list_own_weibos=lambda limit, page, uid=None: items,
             expand_reposted_status=lambda items: None,
         )
         output: list[str] = []
@@ -233,7 +233,7 @@ class CliExtensionTests(unittest.TestCase):
                         repost_info.user_name = original.user_name
 
         fake_service = SimpleNamespace(
-            list_own_weibos=lambda limit, page: items,
+            list_own_weibos=lambda limit, page, uid=None: items,
             show_weibo=show_weibo,
             expand_reposted_status=expand_reposted_status,
         )
@@ -278,7 +278,7 @@ class CliExtensionTests(unittest.TestCase):
         ]
 
         fake_service = SimpleNamespace(
-            list_own_weibos=lambda limit, page: items,
+            list_own_weibos=lambda limit, page, uid=None: items,
             expand_reposted_status=lambda items: None,
         )
         output: list[str] = []
@@ -309,7 +309,7 @@ class CliExtensionTests(unittest.TestCase):
         )
 
         fake_service = SimpleNamespace(
-            list_own_weibos=lambda limit, page: [fake_item],
+            list_own_weibos=lambda limit, page, uid=None: [fake_item],
             show_weibo=lambda _id: None,
             expand_reposted_status=lambda items: None,
         )

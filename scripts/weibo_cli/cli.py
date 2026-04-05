@@ -83,7 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     show_parser.add_argument("--weibo-id", required=True)
     show_parser.set_defaults(handler=handle_show)
 
-    list_parser = subparsers.add_parser("list", help="查看当前账号最近发布的微博", parents=[common_parser])
+    list_parser = subparsers.add_parser("list", help="查看指定用户（或自己）最近发布的微博", parents=[common_parser])
+    list_parser.add_argument("--uid", default=None, help="目标用户 UID；不填则查询当前登录账号自己的微博")
     list_parser.add_argument("--limit", default="10")
     list_parser.add_argument("--page", default="1")
     list_parser.add_argument("--only-reposts", action="store_true", help="只返回转发微博")
@@ -370,7 +371,7 @@ def handle_list(args: argparse.Namespace) -> int:
         if service is None:
             return int(ExitCode.AUTH)
 
-    items_all = service.list_own_weibos(limit=limit, page=page)
+    items_all = service.list_own_weibos(limit=limit, page=page, uid=getattr(args, "uid", None))
 
     if args.only_reposts:
         repost_items = [item for item in items_all if item.reposted_status is not None]

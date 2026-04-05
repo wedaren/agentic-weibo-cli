@@ -56,6 +56,7 @@ scripts/weibo-cli <subcommand> [...args]
 - 发布微博：`scripts/weibo-cli post --text "你的微博正文"`
 - 查看微博详情：`scripts/weibo-cli show --weibo-id <id>`
 - 查看最近微博：`scripts/weibo-cli list --limit 10 --page 1`
+- 查看任意用户最近微博：`scripts/weibo-cli list --uid <UID> --limit 20`
 - 查看最近转发微博：`scripts/weibo-cli list --limit 20 --only-reposts`
 - 查看最近原创微博：`scripts/weibo-cli list --limit 20 --only-originals`
 - 查看评论：`scripts/weibo-cli comments --weibo-id <id> --limit 20 --page 1`
@@ -105,15 +106,14 @@ scripts/weibo-cli <subcommand> [...args]
 13. 需要获取完整关注/粉丝列表时（统计总数、全量与其他数据联动），使用 `--all-pages` 而不是手动循环翻页；JSON 的 `has_more=false` 表示已是全量。
 14. `search --following-only` 会在全网结果中过滤关注用户，自动翻页最多 5 页；若返回条数少于 `--limit`，说明关注用户在该关键词下发帖本来就少，属正常。
 15. `sync` 每次拉取首页时间线 N 页（默认 3 页，约 60 条），写入 `~/.local/share/weibo-cli/feed.db`，重复帖子自动跳过；`local search` 在本地库中做 LIKE 搜索，**无需联网**，适合离线分析关注用户的历史内容。
-16. 如用户想分析关注用户近期内容，应先确认本地库是否已同步（`local stats`），若总条数很少则先执行 `sync --pages 5` 初始化。
-
+16. 如用户想分析关注用户近期内容，应先确认本地库是否已同步（`local stats`），若总条数很少则先执行 `sync --pages 5` 初始化。17. 查看某个用户最近发布的微博，使用 `list --uid <UID>`；`list` 不传 `--uid` 则只查当前登录账号自己的微博。**不要**尝试 `search --keyword "from:<UID>"`，该语法不受支持。
 ## 完成前检查
 
 - `status` 成功时，应看到“已配置 / 可直接使用 / 来源 / UID / 更新时间”等状态信息。
 - `login` 成功时，终端应出现“登录态已写入”并输出 UID。
 - `post` 成功时，终端应出现“发布成功”并返回微博 ID。
 - `show` 成功时，应看到微博 ID、正文、作者和互动计数。
-- `list` 成功时，输出应包含微博 ID 和正文；若是转发微博，还应看到原微博内容。
+- `list` 成功时，输出应包含微博 ID 和正文；若是转发微博，还应看到原微博内容；`list --uid <UID>` 可查看任意用户的最近微博。
 - `comments` 成功时，输出应包含评论用户、时间和正文；若无结果，应明确说明没有可返回的评论记录。
 - `comment` 成功时，终端应出现“评论成功”并返回评论 ID。
 - `like` / `unlike` / `delete` 成功时，应返回目标微博 ID 和操作结果说明。

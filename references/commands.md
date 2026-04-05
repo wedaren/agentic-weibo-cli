@@ -90,14 +90,25 @@ scripts/weibo-cli list --limit 5 --page 1
 scripts/weibo-cli list --limit 20 --only-reposts
 scripts/weibo-cli list --limit 20 --only-originals
 scripts/weibo-cli list --limit 5 --json
+# 查看指定用户的最近微博（传入 UID 即可）
+scripts/weibo-cli list --uid 6529122212 --limit 20
+scripts/weibo-cli list --uid 6529122212 --limit 20 --json
 ```
 
-适用场景：确认刚发出的微博、查看最近动态、检查转发原文。
+适用场景：确认刚发出的微博、查看最近动态、检查转发原文；也可查看任何你知道 UID 的用户的最近微博。
+
+参数：
+- `--uid`（可选）：目标用户 UID；不填则查询当前登录账号自己的微博
+- `--limit`（可选，默认 10）：最多返回条数
+- `--page`（可选，默认 1）：页码
+- `--only-reposts`：只返回转发微博（仅支持不传 `--uid` 时，即自己的微博列表）
+- `--only-originals`：只返回原创微博（同上）
 
 补充说明：
 
-- `--only-reposts` 适合直接查看“最近转发的微博”，避免让上层 agent 先拉全量再自行筛选。
+- `--only-reposts` 适合直接查看"最近转发的微博"，避免让上层 agent 先拉全量再自行筛选。
 - `--only-originals` 适合排除转发，只看自己原创内容。
+- 查看某个关注用户的近期微博，首选 `list --uid <UID>`；`search --keyword "from:<UID>"` 语法不受支持，勿使用。
 
 ## 查询转发
 
