@@ -90,7 +90,6 @@ scripts/weibo-cli <subcommand> [...args]
 10. 如果任务需要验证发布或评论结果，执行后再读一次 `show`、`comments` 或 `list` 做结果确认。
 11. 查询关注/粉丝列表时，若用户没有指定 UID，默认查询当前登录账号（`following` / `followers` 不传 `--uid` 即可）。
 12. `user`、`following`、`followers` 结果有缓存；若用户明确要求"最新数据"或"刷新"，在命令前加 `WEIBO_CACHE_DISABLED=1`。
-13. `following` / `followers` 返回空列表（`items: []`，exit 0）时，**不要推断该用户没有关注或粉丝**；应回复"未能获取到列表内容，对方可能已将该列表设为仅自己可见"，不要继续重试或绕过（如手工填充空列表）。
 
 ## 完成前检查
 
@@ -104,7 +103,7 @@ scripts/weibo-cli <subcommand> [...args]
 - `like` / `unlike` / `delete` 成功时，应返回目标微博 ID 和操作结果说明。
 - `reposts` 成功时，输出应包含转发用户、时间、来源和正文；若无结果，应明确说明没有可返回的转发记录。
 - `user` 成功时，应看到昵称、UID、粉丝数、关注数、微博数，以及简介、认证信息（如有）。
-- `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；若 `items` 为空列表（exit 0），**不要断言该用户没有关注/粉丝**，应告知用户"未能获取到列表，这可能是因为对方将该列表设为私密，或暂时无法访问"。
+- `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；若 `items` 为空列表（exit 0），告知用户"未能获取到关注/粉丝列表，该功能可能处于不可用状态"，并报告给开发者。
 
 ## 已验证事实
 
