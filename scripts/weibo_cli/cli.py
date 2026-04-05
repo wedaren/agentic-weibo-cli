@@ -15,7 +15,7 @@ from .auth import LoginResult, WeiboAuthService
 from .api_client import WeiboApiError, WeiboAuthError, WeiboNetworkError
 from .browser_login import DEFAULT_LOGIN_URL, assert_browser_automation_available, run_browser_login
 from .local_config import get_local_config_path
-from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_post_result, format_reposts, format_search_results, format_session_status, format_user_profile, format_weibo_detail, format_weibo_list
+from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_local_posts, format_local_stats, format_post_result, format_reposts, format_search_results, format_session_status, format_sync_result, format_user_profile, format_weibo_detail, format_weibo_list
 from .service import WeiboService
 from .session import SessionData, SessionStatus
 from .skill_catalog import format_skill_document, format_skill_list, format_skill_prompt_xml, format_skill_validation, load_skills
@@ -141,6 +141,25 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--limit", default="20", help="最多返回条数（默认 20）")
     search_parser.add_argument("--page", default="1", help="页码，仅在不带 --following-only 时有效")
     search_parser.set_defaults(handler=handle_search)
+
+    sync_parser = subparsers.add_parser("sync", help="同步关注用户时间线到本地数据库", parents=[common_parser])
+    sync_parser.add_argument("--pages", default="3", help="拉取页数（默认 3，每页约 20 条）")
+    sync_parser.set_defaults(handler=handle_sync)
+
+    local_parser = subparsers.add_parser("local", help="操作本地缓存的微博数据", parents=[common_parser])
+    local_subparsers = local_parser.add_subparsers(dest="local_command")
+    local_parser.set_defaults(handler=handle_local_default)
+    local_search_p = local_subparsers.add_parser("search", help="在本地数据库中搜索微博", parents=[common_parser])
+    local_search_p.add_argument("--keyword", required=True, help="搜索关键词")
+    local_search_p.add_argument("--limit", default="20", help="最多返回条数（默认 20）")
+    local_search_p.set_defaults(handler=handle_local_search)
+    local_list_p = local_subparsers.add_parser("list", help="列出本地缓存的帖子", parents=[common_parser])
+    local_list_p.add_argument("--uid", help="过滤指定用户 UID")
+    local_list_p.add_argument("--user-name", help="过滤指定用户昵称（精确匹配）")
+    local_list_p.add_argument("--limit", default="20", help="最多返回条数（默认 20）")
+    local_list_p.set_defaults(handler=handle_local_list)
+    local_stats_p = local_subparsers.add_parser("stats", help="查看本地数据库统计", parents=[common_parser])
+    local_stats_p.set_defaults(handler=handle_local_stats)
 
     skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills", parents=[common_parser])
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
@@ -486,6 +505,65 @@ def handle_search(args: argparse.Namespace) -> int:
         {"keyword": args.keyword, "following_only": following_only, "items": items},
         text_output=format_search_results(items, args.keyword, following_only=following_only),
     )
+    return 0
+
+
+def handle_sync(args: argparse.Namespace) -> int:
+    from .local_db import FeedDatabase
+    pages = parse_positive_integer_option(args.pages, "--pages")
+    db = FeedDatabase()
+    try:
+        result = WeiboService.create_default().sync_feed(db, pages=pages)
+    finally:
+        db.close()
+    write_command_output(args, result, text_output=format_sync_result(result))
+    return 0
+
+
+def handle_local_default(args: argparse.Namespace) -> int:
+    raise CliUsageError("请指定子命令：search、list 或 stats。")
+
+
+def handle_local_search(args: argparse.Namespace) -> int:
+    from .local_db import FeedDatabase
+    limit = parse_positive_integer_option(args.limit, "--limit")
+    db = FeedDatabase()
+    try:
+        rows = db.search(args.keyword, limit=limit)
+    finally:
+        db.close()
+    write_command_output(
+        args,
+        {"keyword": args.keyword, "total": len(rows), "items": rows},
+        text_output=format_local_posts(rows, keyword=args.keyword),
+    )
+    return 0
+
+
+def handle_local_list(args: argparse.Namespace) -> int:
+    from .local_db import FeedDatabase
+    limit = parse_positive_integer_option(args.limit, "--limit")
+    db = FeedDatabase()
+    try:
+        rows = db.list_posts(
+            user_id=getattr(args, "uid", None),
+            user_name_filter=getattr(args, "user_name", None),
+            limit=limit,
+        )
+    finally:
+        db.close()
+    write_command_output(args, {"total": len(rows), "items": rows}, text_output=format_local_posts(rows))
+    return 0
+
+
+def handle_local_stats(args: argparse.Namespace) -> int:
+    from .local_db import FeedDatabase
+    db = FeedDatabase()
+    try:
+        stats = db.stats()
+    finally:
+        db.close()
+    write_command_output(args, stats, text_output=format_local_stats(stats))
     return 0
 
 

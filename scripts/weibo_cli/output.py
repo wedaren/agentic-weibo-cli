@@ -7,7 +7,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import CommentItem, FollowItem, ListWeiboItem, PostWeiboResult, RepostItem, UserProfile, WeiboActionResult
+from .models import CommentItem, FollowItem, ListWeiboItem, PostWeiboResult, RepostItem, SyncResult, UserProfile, WeiboActionResult
 from .session import SessionStatus
 
 
@@ -256,3 +256,70 @@ def _format_follow_item(item: FollowItem, index: int) -> list[str]:
     if counts:
         lines.append(f"  {' | '.join(counts)}")
     return lines
+
+
+def format_sync_result(result: SyncResult) -> str:
+    """格式化增量同步结果。"""
+    lines = [
+        "同步完成",
+        f"新增: {result.added} 条",
+        f"跳过（已存在）: {result.skipped} 条",
+        f"过期清理: {result.purged} 条",
+        f"数据库总计: {result.total} 条",
+        f"请求页数: {result.pages_fetched}",
+        f"数据库路径: {result.db_path}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def format_local_stats(stats: dict[str, Any]) -> str:
+    """格式化本地数据库统计信息。"""
+    lines = [
+        "本地 feed 数据库统计",
+        f"总条数: {stats.get('total', 0)}",
+        f"覆盖用户数: {stats.get('user_count', 0)}",
+    ]
+    if stats.get("oldest_synced_at"):
+        lines.append(f"最早同步: {stats['oldest_synced_at']}")
+    if stats.get("newest_synced_at"):
+        lines.append(f"最新同步: {stats['newest_synced_at']}")
+    lines.append(f"保留天数: {stats.get('retention_days', 7)} 天")
+    lines.append(f"数据库路径: {stats.get('db_path', '未知')}")
+    return "\n".join(lines) + "\n"
+
+
+def format_local_posts(rows: list[dict[str, Any]], *, keyword: str | None = None) -> str:
+    """格式化本地数据库查询结果（含 synced_at）。"""
+    if not rows:
+        scope = f"「{keyword}」" if keyword else ""
+        return f"本地数据库中未找到{scope}相关微博。\n"
+    header = f"搜索「{keyword}」，共 {len(rows)} 条：" if keyword else f"共 {len(rows)} 条："
+    lines = [header]
+    for i, row in enumerate(rows, 1):
+        lines.append(f"[{i}] {row['id']}")
+        uid = row.get("user_id")
+        name = row.get("user_name")
+        if name or uid:
+            lines.append(f"作者: {name or '未知用户'}{f' ({uid})' if uid else ''}")
+        if row.get("created_at"):
+            lines.append(f"时间: {row['created_at']}")
+        if row.get("synced_at"):
+            lines.append(f"同步: {row['synced_at']}")
+        counts = (
+            f"转发 {row.get('reposts_count') or 0} | "
+            f"评论 {row.get('comments_count') or 0} | "
+            f"点赞 {row.get('attitudes_count') or 0}"
+        )
+        lines.append(f"互动: {counts}")
+        if row.get("repost_id"):
+            lines.append(f"转发内容: {row.get('text') or '(无转发文案)'}")
+            parts = ["原微博:"]
+            if row.get("repost_user_name"):
+                parts.append(f"@{row['repost_user_name']}")
+            if row.get("repost_id"):
+                parts.append(f"({row['repost_id']})")
+            lines.append(" ".join(parts))
+            lines.append(row.get("repost_text") or "(原微博正文为空)")
+        else:
+            lines.append(row.get("text") or "(空正文)")
+    return "\n".join(lines) + "\n"

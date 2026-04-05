@@ -75,6 +75,10 @@ scripts/weibo-cli <subcommand> [...args]
 - 查看指定用户粉丝列表（单页）：`scripts/weibo-cli followers --uid <UID> --page 2`
 - 全网搜索微博：`scripts/weibo-cli search --keyword <关键词>`
 - 仅在关注用户中搜索微博：`scripts/weibo-cli search --keyword <关键词> --following-only`
+- 同步关注时间线到本地数据库：`scripts/weibo-cli sync`
+- 在本地数据库中搜索：`scripts/weibo-cli local search --keyword <关键词>`
+- 列出本地缓存帖子：`scripts/weibo-cli local list`
+- 本地数据库统计：`scripts/weibo-cli local stats`
 
 说明：面向最终用户的对话回复默认仍优先使用文本格式；只有在需要稳定字段时才切到 `--json`。
 
@@ -100,6 +104,8 @@ scripts/weibo-cli <subcommand> [...args]
 12. `user`、`following`、`followers` 结果有缓存；若用户明确要求"最新数据"或"刷新"，在命令前加 `WEIBO_CACHE_DISABLED=1`。
 13. 需要获取完整关注/粉丝列表时（统计总数、全量与其他数据联动），使用 `--all-pages` 而不是手动循环翻页；JSON 的 `has_more=false` 表示已是全量。
 14. `search --following-only` 会在全网结果中过滤关注用户，自动翻页最多 5 页；若返回条数少于 `--limit`，说明关注用户在该关键词下发帖本来就少，属正常。
+15. `sync` 每次拉取首页时间线 N 页（默认 3 页，约 60 条），写入 `~/.local/share/weibo-cli/feed.db`，重复帖子自动跳过；`local search` 在本地库中做 LIKE 搜索，**无需联网**，适合离线分析关注用户的历史内容。
+16. 如用户想分析关注用户近期内容，应先确认本地库是否已同步（`local stats`），若总条数很少则先执行 `sync --pages 5` 初始化。
 
 ## 完成前检查
 
@@ -115,6 +121,9 @@ scripts/weibo-cli <subcommand> [...args]
 - `user` 成功时，应看到昵称、UID、粉丝数、关注数、微博数，以及简介、认证信息（如有）。
 - `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；`--all-pages` 时还应看到合计条数；若 `items` 为空列表（exit 0），告知用户"未能获取到关注/粉丝列表，该功能可能处于不可用状态"，并报告给开发者。
 - `search` 成功时，应看到带编号的微博列表（微博 ID、作者、互动计数、正文）；若无结果，应明确说明未找到相关微博。
+- `sync` 成功时，应看到新增条数、跳过条数、过期清理条数、数据库总计及路径。
+- `local search` / `local list` 成功时，应看到带编号的微博列表（含"同步"时间戳）；若无结果，应说明本地数据库中未找到相关内容。
+- `local stats` 成功时，应看到总条数、覆盖用户数、最早/最新同步时间、保留天数及路径。
 
 ## 已验证事实
 

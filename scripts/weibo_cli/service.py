@@ -7,11 +7,13 @@
 
 from __future__ import annotations
 
+import time
 from urllib.parse import quote
 
 from .api_client import WeiboApiClient
 from .auth import WeiboAuthService
 from .cache import DiskCache
+from .local_db import DEFAULT_DB_PATH, RETENTION_DAYS, FeedDatabase
 from .logger import get_logger
 
 log = get_logger(__name__)
@@ -28,6 +30,7 @@ from .models import (  # noqa: F401
     PostWeiboResult,
     RepostItem,
     RepostedStatus,
+    SyncResult,
     UserProfile,
     WeiboActionResult,
 )
@@ -389,6 +392,85 @@ class WeiboService:
             if len(batch) < 20:  # 不足 20 条，已到最后一页
                 break
         return all_items
+
+    # ------------------------------------------------------------------
+    # 关注时间线 & 本地同步
+    # ------------------------------------------------------------------
+
+    def get_friends_timeline(self, page: int = 1, count: int = 20) -> list[ListWeiboItem]:
+        """获取首页关注用户时间线（模拟刷首页行为）。
+
+        每次请求约等于真实用户在 App 中下拉刷新一次，风险极低。
+        API: GET /api/statuses/friends_timeline?page=N&count=20&feature=0
+        响应结构: {"ok":1, "data": {"statuses": [...]}}
+        """
+        response = self.client.request_json(
+            "/api/statuses/friends_timeline",
+            method="GET",
+            query={"page": page, "count": count, "feature": 0},
+            headers={"referer": "https://m.weibo.cn/"},
+        )
+        if response.get("ok") == 0:
+            if is_no_data_message(response.get("msg") or response.get("message")):
+                return []
+            assert_api_success(response, "获取首页时间线")
+        data = response.get("data") or response
+        statuses = data.get("statuses") or []
+        items = [normalize_mblog(s) for s in statuses]
+        return [item for item in items if item is not None]
+
+    def sync_feed(self, db: FeedDatabase, *, pages: int = 3) -> SyncResult:
+        """增量同步关注用户时间线到本地数据库。
+
+        策略：
+        - 拉取 pages 页（默认 3 页 ≈ 60 条），逐条 INSERT OR IGNORE 去重
+        - 每页若返回空则提前终止
+        - 同步完成后清理超期记录（保留 RETENTION_DAYS 天）
+        """
+        synced_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        added = 0
+        skipped = 0
+        pages_fetched = 0
+
+        for page in range(1, pages + 1):
+            batch = self.get_friends_timeline(page=page)
+            pages_fetched += 1
+            if not batch:
+                break
+            for item in batch:
+                repost = item.reposted_status
+                is_new = db.insert_post(
+                    post_id=item.id,
+                    bid=item.bid,
+                    user_id=item.user_id,
+                    user_name=item.user_name,
+                    created_at=item.created_at,
+                    synced_at=synced_at,
+                    text=item.text,
+                    repost_id=repost.id if repost else None,
+                    repost_user_name=repost.user_name if repost else None,
+                    repost_text=repost.text if repost else None,
+                    reposts_count=item.reposts_count,
+                    comments_count=item.comments_count,
+                    attitudes_count=item.attitudes_count,
+                )
+                if is_new:
+                    added += 1
+                else:
+                    skipped += 1
+
+        db.commit()
+        purged = db.purge_old()
+        total = db.total()
+
+        return SyncResult(
+            added=added,
+            skipped=skipped,
+            purged=purged,
+            total=total,
+            pages_fetched=pages_fetched,
+            db_path=str(db.path),
+        )
 
     # ------------------------------------------------------------------
     # 搜索
