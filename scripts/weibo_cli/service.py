@@ -361,11 +361,18 @@ class WeiboService:
         return items
 
     def _fetch_follow_list(self, uid: str, kind: str, page: int) -> list[FollowItem]:
-        """公共内部方法，拉取关注(FOLLOW)或粉丝(FANS)列表。"""
+        """公共内部方法，拉取关注(FOLLOW)或粉丝(FANS)列表。
+
+        containerid 规则：
+          - FOLLOW (关注列表): 231051{uid}
+          - FANS   (粉丝列表): 231093{uid}
+        """
+        # 关注列表与粉丝列表使用不同的 containerid 前缀
+        container_prefix = "231051" if kind == "FOLLOW" else "231093"
         response = self.client.request_json(
             "/api/container/getIndex",
             method="GET",
-            query={"type": "uid", "value": uid, "containerid": f"231051{uid}_-_{kind}", "page": page},
+            query={"type": "uid", "value": uid, "containerid": f"{container_prefix}{uid}", "page": page},
             headers={"referer": f"https://m.weibo.cn/u/{uid}"},
         )
         if response.get("ok") == 0 and is_no_data_message(response.get("msg") or response.get("message")):

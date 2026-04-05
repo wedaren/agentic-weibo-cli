@@ -664,7 +664,7 @@ class FollowOutputTests(unittest.TestCase):
     def test_format_follow_list_empty(self) -> None:
         from weibo_cli.output import format_follow_list
         text = format_follow_list([], label="关注")
-        self.assertIn("暂无关注记录", text)
+        self.assertIn("未获取到关注记录", text)
 
     def test_format_follow_list_items(self) -> None:
         from weibo_cli.models import FollowItem

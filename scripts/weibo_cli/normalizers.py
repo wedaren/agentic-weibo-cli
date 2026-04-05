@@ -100,7 +100,7 @@ def is_no_data_message(message: str | None) -> bool:
     normalized = normalize_optional_string(message)
     if normalized is None:
         return False
-    no_data_phrases = ("还没有人转发过", "没有更多数据了", "暂无数据", "no data")
+    no_data_phrases = ("还没有人转发过", "没有更多数据了", "暂无数据", "no data", "这里还没有内容", "还没有微博")
     return any(phrase in normalized for phrase in no_data_phrases)
 
 

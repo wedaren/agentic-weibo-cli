@@ -201,7 +201,7 @@ def format_user_profile(profile: UserProfile) -> str:
 def format_follow_list(items: list[FollowItem], *, label: str = "列表") -> str:
     """格式化关注或粉丝列表。"""
     if not items:
-        return f"暂无{label}记录。\n"
+        return f"未获取到{label}记录（列表可能为空，或该用户已将{label}设为仅自己可见）。\n"
     lines: list[str] = []
     for index, item in enumerate(items, start=1):
         lines.extend(_format_follow_item(item, index))
