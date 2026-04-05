@@ -363,27 +363,31 @@ class WeiboService:
     def _fetch_follow_list(self, uid: str, kind: str, page: int) -> list[FollowItem]:
         """公共内部方法，拉取关注(FOLLOW)或粉丝(FANS)列表。
 
-        containerid 规则：
-          - FOLLOW (关注列表): 231051{uid}
-          - FANS   (粉丝列表): 231093{uid}
+        使用微博 friendship API：
+          - FOLLOW (关注): GET /api/friendships/friends?uid={uid}&page={page}&count=20
+          - FANS   (粉丝): GET /api/friendships/followers?uid={uid}&page={page}&count=20
+        响应结构: {"users": [...], ...} 或 {"data": {"users": [...]}, ...}
         """
-        # 关注列表与粉丝列表使用不同的 containerid 前缀
-        container_prefix = "231051" if kind == "FOLLOW" else "231093"
+        path = "/api/friendships/friends" if kind == "FOLLOW" else "/api/friendships/followers"
         response = self.client.request_json(
-            "/api/container/getIndex",
+            path,
             method="GET",
-            query={"type": "uid", "value": uid, "containerid": f"{container_prefix}{uid}", "page": page},
+            query={"uid": uid, "page": page, "count": 20},
             headers={"referer": f"https://m.weibo.cn/u/{uid}"},
         )
-        if response.get("ok") == 0 and is_no_data_message(response.get("msg") or response.get("message")):
-            return []
-        assert_api_success(response, f"读取{'关注' if kind == 'FOLLOW' else '粉丝'}列表")
-        cards = (response.get("data") or {}).get("cards") or []
+        # 响应可能是顶层 users 数组，也可能包裹在 data 下
+        users_raw: list[dict] = (
+            response.get("users")
+            or (response.get("data") or {}).get("users")
+            or []
+        )
+        if not users_raw and response.get("ok") == 0:
+            if is_no_data_message(response.get("msg") or response.get("message")):
+                return []
+            assert_api_success(response, f"读取{'关注' if kind == 'FOLLOW' else '粉丝'}列表")
         users: list[FollowItem] = []
-        for card in cards:
-            # 用户条目可能在 card 顶层或 card_group 里
-            for user_raw in ([card.get("user")] if card.get("user") else []) + (card.get("card_group") or []):
-                item = normalize_follow_item(user_raw if isinstance(user_raw, dict) and user_raw.get("id") else (user_raw.get("user") if isinstance(user_raw, dict) else None))
-                if item:
-                    users.append(item)
+        for user_raw in users_raw:
+            item = normalize_follow_item(user_raw)
+            if item:
+                users.append(item)
         return users

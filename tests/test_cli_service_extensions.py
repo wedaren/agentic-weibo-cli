@@ -617,13 +617,11 @@ class FollowServiceTests(unittest.TestCase):
         self.assertTrue(profile.verified)
 
     def test_get_following_returns_follow_items(self) -> None:
+        # 新 API /api/friendships/friends 返回顶层 users 数组
         response = {
-            "ok": 1,
-            "data": {
-                "cards": [
-                    {"user": {"id": "111", "screen_name": "关注者A", "followers_count": 10, "friends_count": 5, "statuses_count": 20}},
-                ]
-            },
+            "users": [
+                {"id": "111", "screen_name": "关注者A", "followers_count": 10, "friends_count": 5, "statuses_count": 20},
+            ],
         }
         svc = self._make_service(response)
         items = svc.get_following("123456", page=1)
