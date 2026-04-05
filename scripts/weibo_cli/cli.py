@@ -15,7 +15,7 @@ from .auth import LoginResult, WeiboAuthService
 from .api_client import WeiboApiError, WeiboAuthError, WeiboNetworkError
 from .browser_login import DEFAULT_LOGIN_URL, assert_browser_automation_available, run_browser_login
 from .local_config import get_local_config_path
-from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_post_result, format_reposts, format_session_status, format_user_profile, format_weibo_detail, format_weibo_list
+from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_post_result, format_reposts, format_search_results, format_session_status, format_user_profile, format_weibo_detail, format_weibo_list
 from .service import WeiboService
 from .session import SessionData, SessionStatus
 from .skill_catalog import format_skill_document, format_skill_list, format_skill_prompt_xml, format_skill_validation, load_skills
@@ -132,6 +132,13 @@ def build_parser() -> argparse.ArgumentParser:
     followers_parser.add_argument("--uid", help="目标用户 UID；不填则查询当前登录账号")
     followers_parser.add_argument("--page", default="1")
     followers_parser.set_defaults(handler=handle_followers)
+
+    search_parser = subparsers.add_parser("search", help="按关键词搜索微博", parents=[common_parser])
+    search_parser.add_argument("--keyword", required=True, help="搜索关键词")
+    search_parser.add_argument("--following-only", action="store_true", help="仅返回你关注的用户发布的结果（自动翻页最多 5 页）")
+    search_parser.add_argument("--limit", default="20", help="最多返回条数（默认 20）")
+    search_parser.add_argument("--page", default="1", help="页码，仅在不带 --following-only 时有效")
+    search_parser.set_defaults(handler=handle_search)
 
     skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills", parents=[common_parser])
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
@@ -444,6 +451,21 @@ def handle_followers(args: argparse.Namespace) -> int:
     page = parse_positive_integer_option(args.page, "--page")
     items = svc.get_followers(uid, page=page)
     write_command_output(args, {"uid": uid, "page": page, "items": items}, text_output=format_follow_list(items, label="粉丝"))
+    return 0
+
+
+def handle_search(args: argparse.Namespace) -> int:
+    limit = parse_positive_integer_option(args.limit, "--limit")
+    page = parse_positive_integer_option(args.page, "--page")
+    following_only: bool = args.following_only
+    items = WeiboService.create_default().search_weibo(
+        args.keyword, following_only=following_only, limit=limit, page=page
+    )
+    write_command_output(
+        args,
+        {"keyword": args.keyword, "following_only": following_only, "items": items},
+        text_output=format_search_results(items, args.keyword, following_only=following_only),
+    )
     return 0
 
 

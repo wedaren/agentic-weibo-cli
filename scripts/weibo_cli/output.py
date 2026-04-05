@@ -198,6 +198,31 @@ def format_user_profile(profile: UserProfile) -> str:
     return "\n".join(lines) + "\n"
 
 
+def format_search_results(items: list[ListWeiboItem], keyword: str, *, following_only: bool = False) -> str:
+    """格式化微博搜索结果，包含作者信息。"""
+    if not items:
+        scope = "你关注的用户中" if following_only else "全网"
+        return f"未找到{scope}包含「{keyword}」的微博。\n"
+    scope = "关注用户" if following_only else "全网"
+    lines: list[str] = [f"搜索「{keyword}」（{scope}），共 {len(items)} 条："]
+    for index, item in enumerate(items, start=1):
+        lines.extend(_format_search_item(item, index))
+    return "\n".join(lines) + "\n"
+
+
+def _format_search_item(item: ListWeiboItem, index: int) -> list[str]:
+    lines = [f"[{index}] {item.id}"]
+    if item.user_name or item.user_id:
+        lines.append(f"作者: {item.user_name or '未知用户'}{f' ({item.user_id})' if item.user_id else ''}")
+    if item.created_at:
+        lines.append(f"时间: {item.created_at}")
+    lines.append(
+        f"互动: 转发 {item.reposts_count or 0} | 评论 {item.comments_count or 0} | 点赞 {item.attitudes_count or 0}"
+    )
+    lines.extend(_format_repost_block(item))
+    return lines
+
+
 def format_follow_list(items: list[FollowItem], *, label: str = "列表") -> str:
     """格式化关注或粉丝列表。"""
     if not items:

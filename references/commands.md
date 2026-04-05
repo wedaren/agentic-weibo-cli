@@ -173,6 +173,25 @@ scripts/weibo-cli following --uid <UID> --page 2 --json
 
 结果来自本地 TTL 缓存（5 分钟）。
 
+## 搜索微博
+
+```bash
+scripts/weibo-cli search --keyword karpathy
+scripts/weibo-cli search --keyword karpathy --following-only
+scripts/weibo-cli search --keyword karpathy --following-only --limit 10 --json
+scripts/weibo-cli search --keyword karpathy --page 2 --json
+```
+
+参数：
+- `--keyword`（必填）：搜索关键词
+- `--following-only`（可选）：仅返回你关注的用户发布的结果；开启后自动翻页（最多 5 页）以凑够 limit 条
+- `--limit`（可选，默认 20）：最多返回条数
+- `--page`（可选，默认 1）：页码，仅在不带 `--following-only` 时生效
+
+返回字段（`--json` 时）：keyword、following_only、items（同 list 命令的 item 结构，含 user_name/user_id）
+
+说明：`--following-only` 过滤基于微博搜索结果中的 `user.following` 字段（client-side 过滤），因此结果数量取决于关注用户在全网搜索结果中的占比；关注用户越少、关键词越热门，每页有效结果越稀少。
+
 ## 查看粉丝列表
 
 ```bash

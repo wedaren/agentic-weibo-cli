@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from .api_client import WeiboApiClient
 from .auth import WeiboAuthService
 from .cache import DiskCache
@@ -359,6 +361,66 @@ class WeiboService:
             for i in items
         ], ttl_sec=_TTL_FOLLOW)
         return items
+
+    # ------------------------------------------------------------------
+    # 搜索
+    # ------------------------------------------------------------------
+
+    def search_weibo(
+        self, keyword: str, *, following_only: bool = False, limit: int = 20, page: int = 1
+    ) -> list[ListWeiboItem]:
+        """按关键词搜索微博。
+
+        following_only=True 时，自动翻页（最多 5 页）并过滤出关注用户发布的结果。
+        following_only=False 时，返回指定 page 的搜索结果（不过滤）。
+        """
+        normalized_keyword = normalize_required_text(keyword, "搜索关键词")
+        normalized_limit = normalize_positive_integer(limit, "limit")
+
+        if following_only:
+            items: list[ListWeiboItem] = []
+            for p in range(1, 6):  # 最多翻 5 页来凑结果
+                batch_raw, has_more = self._fetch_search_page(normalized_keyword, page=p)
+                for raw in batch_raw:
+                    if (raw.get("user") or {}).get("following"):
+                        item = normalize_mblog(raw)
+                        if item:
+                            items.append(item)
+                if len(items) >= normalized_limit or not has_more:
+                    break
+            return items[:normalized_limit]
+        else:
+            normalized_page = normalize_positive_integer(page, "page")
+            batch_raw, _ = self._fetch_search_page(normalized_keyword, page=normalized_page)
+            items = []
+            for raw in batch_raw:
+                item = normalize_mblog(raw)
+                if item:
+                    items.append(item)
+            return items[:normalized_limit]
+
+    def _fetch_search_page(self, keyword: str, page: int) -> tuple[list[dict], bool]:
+        """拉取搜索结果的一页，返回 (raw_mblogs_list, has_more)。"""
+        containerid = f"100103type=1&q={quote(keyword)}&t=0"
+        response = self.client.request_json(
+            "/api/container/getIndex",
+            method="GET",
+            query={"containerid": containerid, "page_type": "searchall", "page": page},
+            headers={"referer": f"https://m.weibo.cn/search?containerid={quote(containerid)}"},
+        )
+        if response.get("ok") == 0:
+            if is_no_data_message(response.get("msg") or response.get("message")):
+                return [], False
+            assert_api_success(response, "搜索微博")
+        cards = (response.get("data") or {}).get("cards") or []
+        mblogs: list[dict] = []
+        for card in cards:
+            if card.get("card_type") != 9:
+                continue
+            raw = card.get("mblog")
+            if raw:
+                mblogs.append(raw)
+        return mblogs, bool(cards)
 
     def _fetch_follow_list(self, uid: str, kind: str, page: int) -> list[FollowItem]:
         """公共内部方法，拉取关注(FOLLOW)或粉丝(FANS)列表。
