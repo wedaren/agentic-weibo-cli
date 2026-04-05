@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from weibo_cli.cli import build_parser
-from weibo_cli.output import format_action_result, format_comment_result, format_comments, format_weibo_detail
+from weibo_cli.output import format_action_result, format_comment_result, format_comments, format_json_output, format_weibo_detail
 from weibo_cli.service import CommentItem, ListWeiboItem, WeiboActionResult, WeiboService
+from weibo_cli.session import SessionStatus
 
 
 class FakeClient:
@@ -126,6 +128,15 @@ class CliExtensionTests(unittest.TestCase):
         args = parser.parse_args(["list", "--limit", "5", "--only-reposts"])
         self.assertTrue(args.only_reposts)
         self.assertFalse(args.only_originals)
+
+    def test_json_flag_is_available_before_and_after_subcommand(self) -> None:
+        parser = build_parser()
+
+        args_before = parser.parse_args(["--json", "status"])
+        args_after = parser.parse_args(["list", "--json", "--limit", "5"])
+
+        self.assertTrue(args_before.json)
+        self.assertTrue(args_after.json)
 
     def test_list_rejects_conflicting_filters(self) -> None:
         from weibo_cli.cli import handle_list
@@ -280,8 +291,8 @@ class CliExtensionTests(unittest.TestCase):
         self.assertIn("原创1", rendered)
 
     def test_list_uses_env_cookie_to_restore_when_create_default_fails(self) -> None:
+        from weibo_cli.api_client import WeiboAuthError
         from weibo_cli.cli import handle_list
-        from weibo_cli.session import SessionStatus
 
         fake_item = ListWeiboItem(
             id="10",
@@ -307,7 +318,7 @@ class CliExtensionTests(unittest.TestCase):
 
         # First call to create_default raises, second returns the fake service
         with patch.dict("os.environ", {"WEIBO_COOKIE": "SUB=sub-val; XSRF-TOKEN=csrf", "WEIBO_UID": "123"}, clear=False), patch(
-            "weibo_cli.cli.WeiboService.create_default", side_effect=[RuntimeError("expired"), fake_service]
+            "weibo_cli.cli.WeiboService.create_default", side_effect=[WeiboAuthError("expired", "https://m.weibo.cn"), fake_service]
         ), patch(
             "weibo_cli.cli.WeiboAuthService.inspect", return_value=SessionStatus(configured=True, usable=False, source="local", uid=None, updated_at=None, message="expired", session=None)
         ), patch("weibo_cli.cli.WeiboAuthService.persist_cookie_header", return_value=SimpleNamespace(session=None, persisted_path="/tmp", source_label="env", reused_existing_login=False, profile_dir=None, final_url=None, cookie_names=())), patch(
@@ -318,6 +329,62 @@ class CliExtensionTests(unittest.TestCase):
         rendered = "".join(output)
         self.assertIn("LOGIN_OK", rendered)
         self.assertIn("10", rendered)
+
+    def test_handle_status_can_emit_json(self) -> None:
+        from weibo_cli.cli import handle_status
+
+        output: list[str] = []
+        status = SessionStatus(
+            configured=True,
+            usable=True,
+            source="local",
+            uid="123",
+            updated_at="2026-04-05T00:00:00Z",
+            message="ok",
+            session=None,
+        )
+
+        with patch("weibo_cli.cli.WeiboAuthService.inspect", return_value=status), patch("sys.stdout.write", side_effect=output.append):
+            handle_status(SimpleNamespace(json=True))
+
+        payload = json.loads("".join(output))
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["uid"], "123")
+        self.assertEqual(payload["data"]["source"], "local")
+
+    def test_main_returns_usage_exit_code_for_invalid_limit(self) -> None:
+        from weibo_cli.cli import ExitCode, main
+
+        with patch("sys.stderr.write"):
+            exit_code = main(["list", "--limit", "0"])
+
+        self.assertEqual(exit_code, int(ExitCode.USAGE))
+
+    def test_main_returns_auth_exit_code_for_auth_error(self) -> None:
+        from weibo_cli.api_client import WeiboAuthError
+        from weibo_cli.cli import ExitCode, main
+
+        with patch("weibo_cli.cli.WeiboAuthService.inspect", side_effect=WeiboAuthError("auth failed", "https://m.weibo.cn")), patch(
+            "sys.stderr.write"
+        ):
+            exit_code = main(["status"])
+
+        self.assertEqual(exit_code, int(ExitCode.AUTH))
+
+    def test_main_emits_json_error_payload(self) -> None:
+        from weibo_cli.api_client import WeiboAuthError
+        from weibo_cli.cli import ExitCode, main
+
+        stderr: list[str] = []
+        with patch("weibo_cli.cli.WeiboAuthService.inspect", side_effect=WeiboAuthError("auth failed", "https://m.weibo.cn")), patch(
+            "sys.stderr.write", side_effect=stderr.append
+        ):
+            exit_code = main(["status", "--json"])
+
+        payload = json.loads("".join(stderr))
+        self.assertEqual(exit_code, int(ExitCode.AUTH))
+        self.assertEqual(payload["ok"], False)
+        self.assertEqual(payload["error"]["category"], "auth")
 
 
 class OutputExtensionTests(unittest.TestCase):
@@ -379,6 +446,13 @@ class OutputExtensionTests(unittest.TestCase):
         self.assertIn("点赞: 4", comments)
         self.assertIn("评论成功", comment_result)
         self.assertIn("访问链接: https://m.weibo.cn/status/123", action_result)
+
+    def test_format_json_output_wraps_success_payload(self) -> None:
+        rendered = format_json_output({"items": [{"id": "1"}]})
+
+        payload = json.loads(rendered)
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(payload["data"]["items"][0]["id"], "1")
 
 
 class LongTextTests(unittest.TestCase):

@@ -42,10 +42,13 @@ scripts/weibo-cli <subcommand> [...args]
 
 `login` 默认是非交互的，适合 agent 直接调用。只有显式传入 `--prompt` 时，才会要求用户在终端粘贴 cookie。
 
+如果任务需要把 CLI 结果继续交给脚本、评估器或其他 agent 处理，优先追加 `--json` 获取稳定机器可读输出。
+
 ## 命令选择
 
 - 登录或刷新登录态：`scripts/weibo-cli login`
 - 查看当前登录态是否可直接使用：`scripts/weibo-cli status`
+- 查看当前登录态的机器可读结果：`scripts/weibo-cli status --json`
 - 检查浏览器依赖：`scripts/weibo-cli login --check-browser`
 - 使用环境变量写入登录态：`scripts/weibo-cli login --from-env`
 - 仅在明确需要人工粘贴 cookie 时：`scripts/weibo-cli login --prompt`
@@ -61,6 +64,8 @@ scripts/weibo-cli <subcommand> [...args]
 - 取消点赞：`scripts/weibo-cli unlike --weibo-id <id>`
 - 删除自己发布的微博：`scripts/weibo-cli delete --weibo-id <id>`
 - 查询转发：`scripts/weibo-cli reposts --weibo-id <id> --limit 20 --page 1`
+
+说明：面向最终用户的对话回复默认仍优先使用文本格式；只有在需要稳定字段时才切到 `--json`。
 
 更完整的参数示例见 [references/commands.md](references/commands.md)。
 

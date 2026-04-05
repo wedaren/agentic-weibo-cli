@@ -2,8 +2,29 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Any
+
 from .models import CommentItem, ListWeiboItem, PostWeiboResult, RepostItem, WeiboActionResult
 from .session import SessionStatus
+
+
+def format_json_output(payload: Any) -> str:
+    return json.dumps({"ok": True, "data": normalize_json_value(payload)}, ensure_ascii=False, indent=2) + "\n"
+
+
+def normalize_json_value(value: Any) -> Any:
+    if is_dataclass(value):
+        return normalize_json_value(asdict(value))
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): normalize_json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [normalize_json_value(item) for item in value]
+    return value
 
 
 def format_session_status(status: SessionStatus) -> str:

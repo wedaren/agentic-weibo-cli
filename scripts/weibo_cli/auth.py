@@ -79,7 +79,7 @@ class WeiboAuthService:
     def require_valid_session(self) -> SessionData:
         status = self.inspect()
         if not status.usable or status.session is None:
-            raise RuntimeError(status.message)
+            raise WeiboAuthError(status.message, self.base_url or "https://m.weibo.cn")
         return status.session
 
     def persist_browser_login(

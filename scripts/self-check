@@ -10,10 +10,13 @@ echo "[1/4] 校验 skills 元数据"
 echo "[2/4] 检查 CLI 帮助"
 "$CLI" --help >/dev/null
 
-echo "[3/4] 检查浏览器自动化"
+echo "[3/5] 检查 JSON 输出契约"
+"$CLI" status --json >/dev/null
+
+echo "[4/5] 检查浏览器自动化"
 "$CLI" login --check-browser >/dev/null
 
-echo "[4/4] 验证当前登录态可读"
+echo "[5/5] 验证当前登录态可读"
 "$CLI" list --limit 1 --page 1 >/dev/null
 
-echo "自检通过：skills、帮助、浏览器自动化和最近微博读取均正常。"
+echo "自检通过：skills、帮助、JSON 输出、浏览器自动化和最近微博读取均正常。"

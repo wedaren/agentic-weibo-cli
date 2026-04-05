@@ -3,25 +3,62 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
+from typing import Any
 
 from .auth import LoginResult, WeiboAuthService
+from .api_client import WeiboApiError, WeiboAuthError, WeiboNetworkError
 from .browser_login import DEFAULT_LOGIN_URL, assert_browser_automation_available, run_browser_login
 from .local_config import get_local_config_path
-from .output import format_action_result, format_comment_result, format_comments, format_post_result, format_reposts, format_session_status, format_weibo_detail, format_weibo_list
+from .output import format_action_result, format_comment_result, format_comments, format_json_output, format_post_result, format_reposts, format_session_status, format_weibo_detail, format_weibo_list
 from .service import WeiboService
 from .session import SessionData, SessionStatus
 from .skill_catalog import format_skill_document, format_skill_list, format_skill_prompt_xml, format_skill_validation, load_skills
 
 
+class ExitCode(IntEnum):
+    OK = 0
+    USAGE = 2
+    AUTH = 3
+    API = 4
+    NETWORK = 5
+    INTERNAL = 10
+
+
+class CliUsageError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorDescriptor:
+    exit_code: int
+    category: str
+    message: str
+
+
+def build_common_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="以 JSON 输出结果，适合脚本与 agent 调用",
+    )
+    return parser
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="weibo-cli", description="面向个人账号的微博命令行工具")
+    common_parser = build_common_parser()
+    parser = argparse.ArgumentParser(prog="weibo-cli", description="面向个人账号的微博命令行工具", parents=[common_parser])
     parser.add_argument("--version", action="version", version="0.1.0")
     subparsers = parser.add_subparsers(dest="command")
 
-    login_parser = subparsers.add_parser("login", help="通过本地扫码流程登录微博并保存登录态")
+    login_parser = subparsers.add_parser("login", help="通过本地扫码流程登录微博并保存登录态", parents=[common_parser])
     login_parser.add_argument("--cookie")
     login_parser.add_argument("--uid")
     login_parser.add_argument("--login-url", default=DEFAULT_LOGIN_URL)
@@ -35,62 +72,62 @@ def build_parser() -> argparse.ArgumentParser:
     login_parser.add_argument("--force", action="store_true", help="忽略当前本地登录态，强制重新执行登录流程")
     login_parser.set_defaults(prompt=False, handler=handle_login)
 
-    status_parser = subparsers.add_parser("status", help="查看当前登录态状态")
+    status_parser = subparsers.add_parser("status", help="查看当前登录态状态", parents=[common_parser])
     status_parser.set_defaults(handler=handle_status)
 
-    post_parser = subparsers.add_parser("post", help="发布一条微博")
+    post_parser = subparsers.add_parser("post", help="发布一条微博", parents=[common_parser])
     post_parser.add_argument("--text", required=True)
     post_parser.set_defaults(handler=handle_post)
 
-    show_parser = subparsers.add_parser("show", help="查看指定微博的详情")
+    show_parser = subparsers.add_parser("show", help="查看指定微博的详情", parents=[common_parser])
     show_parser.add_argument("--weibo-id", required=True)
     show_parser.set_defaults(handler=handle_show)
 
-    list_parser = subparsers.add_parser("list", help="查看当前账号最近发布的微博")
+    list_parser = subparsers.add_parser("list", help="查看当前账号最近发布的微博", parents=[common_parser])
     list_parser.add_argument("--limit", default="10")
     list_parser.add_argument("--page", default="1")
     list_parser.add_argument("--only-reposts", action="store_true", help="只返回转发微博")
     list_parser.add_argument("--only-originals", action="store_true", help="只返回原创微博")
     list_parser.set_defaults(handler=handle_list)
 
-    comments_parser = subparsers.add_parser("comments", help="查看指定微博的评论")
+    comments_parser = subparsers.add_parser("comments", help="查看指定微博的评论", parents=[common_parser])
     comments_parser.add_argument("--weibo-id", required=True)
     comments_parser.add_argument("--limit", default="20")
     comments_parser.add_argument("--page", default="1")
     comments_parser.set_defaults(handler=handle_comments)
 
-    comment_parser = subparsers.add_parser("comment", help="对指定微博发表评论")
+    comment_parser = subparsers.add_parser("comment", help="对指定微博发表评论", parents=[common_parser])
     comment_parser.add_argument("--weibo-id", required=True)
     comment_parser.add_argument("--text", required=True)
     comment_parser.set_defaults(handler=handle_comment)
 
-    like_parser = subparsers.add_parser("like", help="给指定微博点赞")
+    like_parser = subparsers.add_parser("like", help="给指定微博点赞", parents=[common_parser])
     like_parser.add_argument("--weibo-id", required=True)
     like_parser.set_defaults(handler=handle_like)
 
-    unlike_parser = subparsers.add_parser("unlike", help="取消点赞指定微博")
+    unlike_parser = subparsers.add_parser("unlike", help="取消点赞指定微博", parents=[common_parser])
     unlike_parser.add_argument("--weibo-id", required=True)
     unlike_parser.set_defaults(handler=handle_unlike)
 
-    delete_parser = subparsers.add_parser("delete", help="删除自己发布的微博")
+    delete_parser = subparsers.add_parser("delete", help="删除自己发布的微博", parents=[common_parser])
     delete_parser.add_argument("--weibo-id", required=True)
     delete_parser.set_defaults(handler=handle_delete)
 
-    reposts_parser = subparsers.add_parser("reposts", help="获取指定微博的转发信息")
+    reposts_parser = subparsers.add_parser("reposts", help="获取指定微博的转发信息", parents=[common_parser])
     reposts_parser.add_argument("--weibo-id", required=True)
     reposts_parser.add_argument("--limit", default="20")
     reposts_parser.add_argument("--page", default="1")
     reposts_parser.set_defaults(handler=handle_reposts)
 
-    skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills")
+    skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills", parents=[common_parser])
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
     skills_parser.set_defaults(handler=handle_skills_list)
-    show_parser = skills_subparsers.add_parser("show", help="显示某个 skill 的完整文档")
+    show_parser = skills_subparsers.add_parser("show", help="显示某个 skill 的完整文档", parents=[common_parser])
     show_parser.add_argument("name")
     show_parser.set_defaults(handler=handle_skills_show)
-    prompt_parser = skills_subparsers.add_parser("prompt", help="输出可直接提供给 agent 的 <available_skills> XML")
+    prompt_parser = skills_subparsers.add_parser("prompt", help="输出可直接提供给 agent 的 <available_skills> XML", parents=[common_parser])
     prompt_parser.set_defaults(handler=handle_skills_prompt)
-    validate_parser = skills_subparsers.add_parser("validate", help="校验 skills 的 YAML frontmatter 与目录规范")
+    validate_parser = skills_subparsers.add_parser("validate", help="校验 skills 的 YAML frontmatter 与目录规范", parents=[common_parser])
     validate_parser.set_defaults(handler=handle_skills_validate)
 
     return parser
@@ -98,6 +135,59 @@ def build_parser() -> argparse.ArgumentParser:
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def is_json_output_enabled(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "json", False))
+
+
+def write_command_output(
+    args: argparse.Namespace,
+    payload: Any,
+    *,
+    text_output: str,
+) -> None:
+    if is_json_output_enabled(args):
+        sys.stdout.write(format_json_output(payload))
+        return
+    sys.stdout.write(text_output)
+
+
+def classify_error(error: Exception) -> ErrorDescriptor:
+    if isinstance(error, CliUsageError):
+        return ErrorDescriptor(exit_code=int(ExitCode.USAGE), category="usage", message=str(error))
+    if isinstance(error, WeiboAuthError):
+        return ErrorDescriptor(exit_code=int(ExitCode.AUTH), category="auth", message=str(error))
+    if isinstance(error, WeiboNetworkError):
+        return ErrorDescriptor(exit_code=int(ExitCode.NETWORK), category="network", message=str(error))
+    if isinstance(error, WeiboApiError):
+        return ErrorDescriptor(exit_code=int(ExitCode.API), category="api", message=str(error))
+    if isinstance(error, RuntimeError):
+        return ErrorDescriptor(exit_code=int(ExitCode.API), category="runtime", message=str(error))
+    return ErrorDescriptor(exit_code=int(ExitCode.INTERNAL), category="internal", message=str(error))
+
+
+def write_error_output(error: Exception, *, json_output: bool) -> int:
+    descriptor = classify_error(error)
+    if json_output:
+        sys.stderr.write(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "category": descriptor.category,
+                        "exit_code": descriptor.exit_code,
+                        "message": descriptor.message,
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n"
+        )
+        return descriptor.exit_code
+    sys.stderr.write(f"{descriptor.message}\n")
+    return descriptor.exit_code
 
 
 def handle_login(args: argparse.Namespace) -> int:
@@ -108,20 +198,27 @@ def handle_login(args: argparse.Namespace) -> int:
 
     if args.check_browser:
         executable_path = assert_browser_automation_available(args.browser_path)
-        sys.stdout.write(f"浏览器自动化可用：{executable_path}\n")
+        write_command_output(args, {"browser_path": executable_path}, text_output=f"浏览器自动化可用：{executable_path}\n")
         return 0
 
     explicit_login_request = bool(cookie or args.manual or args.prompt or args.from_env)
     if not args.force and not explicit_login_request:
         current_status = auth.inspect()
         if current_status.usable:
-            sys.stdout.write(format_session_status(current_status))
-            sys.stdout.write("当前登录态有效，无需重复登录。若需刷新登录态，请追加 --force。\n")
+            write_command_output(
+                args,
+                {
+                    "status": current_status,
+                    "reused_existing_session": True,
+                    "message": "当前登录态有效，无需重复登录。若需刷新登录态，请追加 --force。",
+                },
+                text_output=format_session_status(current_status) + "当前登录态有效，无需重复登录。若需刷新登录态，请追加 --force。\n",
+            )
             return 0
 
     if cookie:
         result = auth.persist_cookie_header(cookie_header=cookie, uid=uid, login_url=args.login_url, source_label="显式提供")
-        sys.stdout.write(format_login_result(result))
+        write_command_output(args, result, text_output=format_login_result(result))
         return 0
 
     if args.prompt or args.manual:
@@ -129,9 +226,9 @@ def handle_login(args: argparse.Namespace) -> int:
         manual_cookie = prompt_input("请输入登录成功后的完整 cookie：")
         manual_uid = uid or prompt_input("如已知账号 UID，请输入（可直接回车跳过）：", optional=True)
         if not manual_cookie:
-            raise RuntimeError(f"未获取到可持久化的微博 cookie。默认本地文件路径：{get_local_config_path()}")
+            raise CliUsageError(f"未获取到可持久化的微博 cookie。默认本地文件路径：{get_local_config_path()}")
         result = auth.persist_cookie_header(cookie_header=manual_cookie, uid=manual_uid, login_url=args.login_url, source_label="手动录入")
-        sys.stdout.write(format_login_result(result))
+        write_command_output(args, result, text_output=format_login_result(result))
         return 0
 
     render_browser_login_instructions(args.login_url, timeout_ms, args.browser_user_data_dir)
@@ -148,12 +245,13 @@ def handle_login(args: argparse.Namespace) -> int:
             "未获取到可持久化的微博 cookie。"
             f"请重试浏览器扫码，或使用 --cookie / --from-env / --prompt 进入手动粘贴模式。默认本地文件路径：{get_local_config_path()}"
         ) from error
-    sys.stdout.write(format_login_result(result))
+    write_command_output(args, result, text_output=format_login_result(result))
     return 0
 
 
 def handle_status(args: argparse.Namespace) -> int:
-    sys.stdout.write(format_session_status(WeiboAuthService().inspect()))
+    status = WeiboAuthService().inspect()
+    write_command_output(args, status, text_output=format_session_status(status))
     return 0
 
 
@@ -206,26 +304,26 @@ def _recover_session(auth: WeiboAuthService) -> WeiboService | None:
 
 def handle_post(args: argparse.Namespace) -> int:
     result = WeiboService.create_default().post_weibo(args.text)
-    sys.stdout.write(format_post_result(result))
+    write_command_output(args, result, text_output=format_post_result(result))
     return 0
 
 
 def handle_show(args: argparse.Namespace) -> int:
     result = WeiboService.create_default().show_weibo(args.weibo_id)
-    sys.stdout.write(format_weibo_detail(result))
+    write_command_output(args, result, text_output=format_weibo_detail(result))
     return 0
 
 
 def handle_list(args: argparse.Namespace) -> int:
     if args.only_reposts and args.only_originals:
-        raise RuntimeError("--only-reposts 和 --only-originals 不能同时使用。")
+        raise CliUsageError("--only-reposts 和 --only-originals 不能同时使用。")
     try:
         service = WeiboService.create_default()
-    except RuntimeError:
+    except WeiboAuthError:
         auth = WeiboAuthService()
         service = _recover_session(auth)
         if service is None:
-            return 1
+            return int(ExitCode.AUTH)
 
     items_all = service.list_own_weibos(
         limit=parse_positive_integer_option(args.limit, "--limit"),
@@ -235,17 +333,31 @@ def handle_list(args: argparse.Namespace) -> int:
     if args.only_reposts:
         repost_items = [item for item in items_all if item.reposted_status is not None]
         if not repost_items:
-            sys.stdout.write(f"未查询到转发，回退显示最近 {len(items_all)} 条微博。\n")
-            sys.stdout.write(format_weibo_list(items_all))
+            write_command_output(
+                args,
+                {
+                    "items": items_all,
+                    "filter": "only-reposts",
+                    "fallback_to_recent": True,
+                    "message": f"未查询到转发，回退显示最近 {len(items_all)} 条微博。",
+                },
+                text_output=f"未查询到转发，回退显示最近 {len(items_all)} 条微博。\n" + format_weibo_list(items_all),
+            )
             return 0
         service.expand_reposted_status(repost_items)
-        sys.stdout.write(format_weibo_list(repost_items))
+        write_command_output(
+            args,
+            {"items": repost_items, "filter": "only-reposts", "expanded_reposted_status": True},
+            text_output=format_weibo_list(repost_items),
+        )
         return 0
 
     if args.only_originals:
         items_all = [item for item in items_all if item.reposted_status is None]
+        write_command_output(args, {"items": items_all, "filter": "only-originals"}, text_output=format_weibo_list(items_all))
+        return 0
 
-    sys.stdout.write(format_weibo_list(items_all))
+    write_command_output(args, {"items": items_all, "filter": "all"}, text_output=format_weibo_list(items_all))
     return 0
 
 
@@ -255,31 +367,31 @@ def handle_comments(args: argparse.Namespace) -> int:
         limit=parse_positive_integer_option(args.limit, "--limit"),
         page=parse_positive_integer_option(args.page, "--page"),
     )
-    sys.stdout.write(format_comments(items))
+    write_command_output(args, {"items": items}, text_output=format_comments(items))
     return 0
 
 
 def handle_comment(args: argparse.Namespace) -> int:
     result = WeiboService.create_default().create_comment(args.weibo_id, args.text)
-    sys.stdout.write(format_comment_result(result))
+    write_command_output(args, result, text_output=format_comment_result(result))
     return 0
 
 
 def handle_like(args: argparse.Namespace) -> int:
     result = WeiboService.create_default().like_weibo(args.weibo_id)
-    sys.stdout.write(format_action_result(result))
+    write_command_output(args, result, text_output=format_action_result(result))
     return 0
 
 
 def handle_unlike(args: argparse.Namespace) -> int:
     result = WeiboService.create_default().unlike_weibo(args.weibo_id)
-    sys.stdout.write(format_action_result(result))
+    write_command_output(args, result, text_output=format_action_result(result))
     return 0
 
 
 def handle_delete(args: argparse.Namespace) -> int:
     result = WeiboService.create_default().delete_weibo(args.weibo_id)
-    sys.stdout.write(format_action_result(result))
+    write_command_output(args, result, text_output=format_action_result(result))
     return 0
 
 
@@ -289,7 +401,7 @@ def handle_reposts(args: argparse.Namespace) -> int:
         limit=parse_positive_integer_option(args.limit, "--limit"),
         page=parse_positive_integer_option(args.page, "--page"),
     )
-    sys.stdout.write(format_reposts(items))
+    write_command_output(args, {"items": items}, text_output=format_reposts(items))
     return 0
 
 
@@ -297,7 +409,7 @@ def handle_skills_list(args: argparse.Namespace) -> int:
     skills, issues = load_skills(repo_root())
     if issues:
         raise RuntimeError(format_skill_validation(issues).rstrip())
-    sys.stdout.write(format_skill_list(skills))
+    write_command_output(args, {"skills": skills}, text_output=format_skill_list(skills))
     return 0
 
 
@@ -307,23 +419,28 @@ def handle_skills_show(args: argparse.Namespace) -> int:
         raise RuntimeError(format_skill_validation(issues).rstrip())
     for skill in skills:
         if skill.name == args.name.strip().lower():
-            sys.stdout.write(format_skill_document(skill))
+            write_command_output(args, skill, text_output=format_skill_document(skill))
             return 0
-    raise RuntimeError(f"未找到名为 {args.name} 的 skill。可用 skill：{', '.join(skill.name for skill in skills)}")
+    raise CliUsageError(f"未找到名为 {args.name} 的 skill。可用 skill：{', '.join(skill.name for skill in skills)}")
 
 
 def handle_skills_prompt(args: argparse.Namespace) -> int:
     skills, issues = load_skills(repo_root())
     if issues:
         raise RuntimeError(format_skill_validation(issues).rstrip())
-    sys.stdout.write(format_skill_prompt_xml(skills))
+    prompt_xml = format_skill_prompt_xml(skills)
+    write_command_output(args, {"prompt_xml": prompt_xml}, text_output=prompt_xml)
     return 0
 
 
 def handle_skills_validate(args: argparse.Namespace) -> int:
     _, issues = load_skills(repo_root())
     output = format_skill_validation(issues)
-    sys.stdout.write(output)
+    write_command_output(
+        args,
+        {"valid": not issues, "issues": [{"path": path, "messages": messages} for path, messages in issues]},
+        text_output=output,
+    )
     return 1 if issues else 0
 
 
@@ -331,9 +448,9 @@ def parse_positive_integer_option(value: str, option_name: str) -> int:
     try:
         parsed = int(value)
     except ValueError as error:
-        raise RuntimeError(f"{option_name} 必须是大于 0 的整数。") from error
+        raise CliUsageError(f"{option_name} 必须是大于 0 的整数。") from error
     if parsed <= 0:
-        raise RuntimeError(f"{option_name} 必须是大于 0 的整数。")
+        raise CliUsageError(f"{option_name} 必须是大于 0 的整数。")
     return parsed
 
 
@@ -341,9 +458,9 @@ def parse_timeout_ms(raw_value: str) -> int:
     try:
         seconds = int(raw_value)
     except ValueError as error:
-        raise RuntimeError("--timeout-sec 必须是大于 0 的整数。") from error
+        raise CliUsageError("--timeout-sec 必须是大于 0 的整数。") from error
     if seconds <= 0:
-        raise RuntimeError("--timeout-sec 必须是大于 0 的整数。")
+        raise CliUsageError("--timeout-sec 必须是大于 0 的整数。")
     return seconds * 1000
 
 
@@ -417,13 +534,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not hasattr(args, "handler"):
         parser.print_help()
-        return 0
-    return int(args.handler(args) or 0)
+        return int(ExitCode.OK)
+    try:
+        return int(args.handler(args) or 0)
+    except Exception as error:  # noqa: BLE001
+        return write_error_output(error, json_output=is_json_output_enabled(args))
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except Exception as error:  # noqa: BLE001
-        sys.stderr.write(f"{error}\n")
-        raise SystemExit(1)
+    raise SystemExit(main())

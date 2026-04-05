@@ -14,10 +14,35 @@ npm run skills:venv
 npm run smoke
 ```
 
+## 通用约定
+
+- 所有业务命令都支持 `--json`，用于输出稳定的机器可读结果
+- 默认输出为面向终端阅读的文本
+- 成功时退出码为 `0`，失败时退出码为非 `0`
+- 正常结果写到 stdout，错误信息写到 stderr
+
+当前退出码约定：
+
+- `0`：成功
+- `2`：参数或命令用法错误
+- `3`：鉴权失败或登录态无效
+- `4`：业务接口或运行时操作失败
+- `5`：网络请求失败
+- `10`：未分类内部错误
+
+示例：
+
+```bash
+scripts/weibo-cli status --json
+scripts/weibo-cli list --limit 5 --json
+scripts/weibo-cli skills validate --json
+```
+
 ## 查看当前登录态状态
 
 ```bash
 scripts/weibo-cli status
+scripts/weibo-cli status --json
 ```
 
 适用场景：先确认当前是否已登录、登录态是否还可直接使用，避免重复执行 `login`。
@@ -28,6 +53,7 @@ scripts/weibo-cli status
 scripts/weibo-cli login
 scripts/weibo-cli login --force
 scripts/weibo-cli login --check-browser
+scripts/weibo-cli login --check-browser --json
 scripts/weibo-cli login --browser-user-data-dir .local/browser-profile
 scripts/weibo-cli login --prompt
 WEIBO_COOKIE='SUB=...; SUBP=...; SCF=...' WEIBO_UID='1234567890' scripts/weibo-cli login --from-env
@@ -43,6 +69,7 @@ WEIBO_COOKIE='SUB=...; SUBP=...; SCF=...' WEIBO_UID='1234567890' scripts/weibo-c
 
 ```bash
 scripts/weibo-cli post --text "test from skill"
+scripts/weibo-cli post --text "test from skill" --json
 ```
 
 要求：文本已经确认，不为空。
@@ -51,6 +78,7 @@ scripts/weibo-cli post --text "test from skill"
 
 ```bash
 scripts/weibo-cli show --weibo-id 1234567890123456
+scripts/weibo-cli show --weibo-id 1234567890123456 --json
 ```
 
 适用场景：查看某条微博正文、来源、作者和互动计数，确认要评论、点赞或删除的目标是否正确。
@@ -61,6 +89,7 @@ scripts/weibo-cli show --weibo-id 1234567890123456
 scripts/weibo-cli list --limit 5 --page 1
 scripts/weibo-cli list --limit 20 --only-reposts
 scripts/weibo-cli list --limit 20 --only-originals
+scripts/weibo-cli list --limit 5 --json
 ```
 
 适用场景：确认刚发出的微博、查看最近动态、检查转发原文。
@@ -74,6 +103,7 @@ scripts/weibo-cli list --limit 20 --only-originals
 
 ```bash
 scripts/weibo-cli reposts --weibo-id 1234567890123456 --limit 20 --page 1
+scripts/weibo-cli reposts --weibo-id 1234567890123456 --limit 20 --page 1 --json
 ```
 
 要求：必须提供明确的微博 ID。
@@ -82,6 +112,7 @@ scripts/weibo-cli reposts --weibo-id 1234567890123456 --limit 20 --page 1
 
 ```bash
 scripts/weibo-cli comments --weibo-id 1234567890123456 --limit 20 --page 1
+scripts/weibo-cli comments --weibo-id 1234567890123456 --limit 20 --page 1 --json
 ```
 
 适用场景：查看指定微博下的最新评论，确认某条互动是否已经出现。
@@ -90,6 +121,7 @@ scripts/weibo-cli comments --weibo-id 1234567890123456 --limit 20 --page 1
 
 ```bash
 scripts/weibo-cli comment --weibo-id 1234567890123456 --text "收到，支持你"
+scripts/weibo-cli comment --weibo-id 1234567890123456 --text "收到，支持你" --json
 ```
 
 要求：必须提供明确的微博 ID，且评论文本已经确认。
@@ -99,6 +131,7 @@ scripts/weibo-cli comment --weibo-id 1234567890123456 --text "收到，支持你
 ```bash
 scripts/weibo-cli like --weibo-id 1234567890123456
 scripts/weibo-cli unlike --weibo-id 1234567890123456
+scripts/weibo-cli like --weibo-id 1234567890123456 --json
 ```
 
 适用场景：对指定微博表达支持，或撤销此前的点赞操作。
@@ -107,6 +140,7 @@ scripts/weibo-cli unlike --weibo-id 1234567890123456
 
 ```bash
 scripts/weibo-cli delete --weibo-id 1234567890123456
+scripts/weibo-cli delete --weibo-id 1234567890123456 --json
 ```
 
 要求：只在用户明确要求删除时执行；删除属于不可逆操作，执行前应再次确认目标微博 ID。

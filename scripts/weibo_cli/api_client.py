@@ -24,6 +24,10 @@ class WeiboAuthError(WeiboApiError):
     pass
 
 
+class WeiboNetworkError(WeiboApiError):
+    pass
+
+
 @dataclass(slots=True)
 class SessionProbeResult:
     ok: bool
@@ -94,14 +98,20 @@ class WeiboApiClient:
     ) -> requests.Response:
         self.wait_for_rate_limit()
         url = self.build_url(path, query)
-        response = self.http.request(
-            method=method,
-            url=url,
-            headers=self.build_headers(headers, auth_required=auth_required),
-            data=data,
-            allow_redirects=True,
-            timeout=30,
-        )
+        try:
+            response = self.http.request(
+                method=method,
+                url=url,
+                headers=self.build_headers(headers, auth_required=auth_required),
+                data=data,
+                allow_redirects=True,
+                timeout=30,
+            )
+        except requests.RequestException as error:
+            raise WeiboNetworkError(
+                f"微博接口网络请求失败：{error}",
+                url,
+            ) from error
         self.last_request_at = time.time()
         self._merge_response_cookies(response.cookies)
 

@@ -5,6 +5,7 @@
 这个仓库现在本身就是一个单一标准 skill 目录：根目录直接包含 `SKILL.md`、`scripts/`、`references/`、`evals/` 与 `requirements.txt`。既可以直接作为 Agent Skills skill 使用，也可以通过内置 CLI 执行微博操作。
 
 当前实现的模块分层、调用链与会话模型见 [references/architecture.md](/Users/wedaren/.agents/skills/agentic-weibo-cli/references/architecture.md)。
+CLI 与 skill 的整合规范见 [references/cli-skill-conventions.md](/Users/wedaren/.agents/skills/agentic-weibo-cli/references/cli-skill-conventions.md)。
 
 ## 环境要求
 
@@ -46,6 +47,7 @@ npm run cli -- skills
 npm run cli -- skills show agentic-weibo-cli
 npm run cli -- skills prompt
 npm run cli -- skills validate
+npm run evals:init -- --workspace ../agentic-weibo-cli-workspace --iteration 1
 npm run smoke
 ```
 
@@ -109,6 +111,27 @@ CLI -> AuthService -> SessionStore / ApiClient -> Weibo API -> Service normaliza
 ```
 
 更完整的分层职责、登录链路和 cookie 处理策略见 [references/architecture.md](/Users/wedaren/.agents/skills/agentic-weibo-cli/references/architecture.md)。
+
+## CLI 规范
+
+当前仓库按“可人用、可脚本化、可被 agent 调用”的完整 CLI + skill 项目维护，默认遵循这些约定：
+
+- 正常结果写到 stdout，错误写到 stderr
+- 成功返回退出码 `0`，失败返回非 `0`
+- 退出码按类型分层：`2` 参数错误，`3` 鉴权失败，`4` 接口/运行失败，`5` 网络失败，`10` 内部错误
+- 默认输出面向人类阅读的文本；追加 `--json` 后输出稳定的机器可读 JSON
+- 配置优先级固定为：环境变量 > 本地 `.local/weibo-session.json`
+- 默认非交互，只有显式传 `--prompt` 才要求终端输入 cookie
+- 破坏性动作由 skill 层负责先确认、再调用 CLI
+- 评估与回归通过 `evals/` 和 `npm run evals:init` 一起管理
+
+适合自动化调用的例子：
+
+```bash
+npm run cli -- status --json
+npm run cli -- list --limit 5 --json
+npm run cli -- skills validate --json
+```
 
 ## 扫码登录
 
@@ -180,6 +203,24 @@ npm run cli -- skills prompt
 
 ```bash
 npm run skills:validate
+```
+
+获取机器可读状态输出：
+
+```bash
+npm run cli -- status --json
+```
+
+初始化第一轮评估 workspace：
+
+```bash
+npm run evals:init -- --workspace ../agentic-weibo-cli-workspace --iteration 1
+```
+
+如果你要把旧版 skill 快照作为对照组：
+
+```bash
+npm run evals:init -- --workspace ../agentic-weibo-cli-workspace --iteration 2 --baseline old_skill --snapshot-old-skill
 ```
 
 执行一轮无副作用本地自检：

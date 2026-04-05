@@ -31,9 +31,10 @@
 - `scripts/weibo_cli/cli.py`
   - 注册 `login`、`status`、`post`、`list`、`reposts`、`skills`
   - 负责参数校验和命令分发
+  - 负责统一的 `--json` 机器输出契约
   - 不直接实现登录、鉴权或业务逻辑，只调用服务层与输出层
 - `scripts/weibo_cli/output.py`
-  - 负责把领域对象格式化成稳定终端文本
+  - 负责把领域对象格式化成稳定终端文本与 JSON 输出
 
 ### 鉴权层
 

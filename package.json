@@ -9,6 +9,7 @@
   "scripts": {
     "build": "python3 -m compileall scripts/weibo_cli",
     "cli": "scripts/weibo-cli",
+    "evals:init": "scripts/setup-evals",
     "help": "npm run cli -- --help",
     "smoke": "scripts/self-check",
     "skills:validate": "npm run cli -- skills validate",
