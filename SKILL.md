@@ -1,6 +1,6 @@
 ---
 name: agentic-weibo-cli
-description: 使用内置的微博 CLI 处理扫码登录、发布微博、查看微博详情、查看个人微博列表、查询评论与转发、发表评论、点赞、取消点赞、删除自己发布的微博。用户提到微博登录、发微博、看微博、评论、点赞、删微博、确认发帖结果时，应使用此 skill。
+description: 使用内置的微博 CLI 处理扫码登录、发布微博、查看微博详情、查看个人微博列表、查询评论与转发、发表评论、点赞、取消点赞、删除自己发布的微博；还支持查看任意用户主页信息、关注列表、粉丝列表。用户提到微博登录、发微博、看微博、评论、点赞、删微博、查关注、查粉丝、查用户信息、确认发帖结果时，应使用此 skill。
 compatibility: 需要 Python 3.14+。首次使用前建议创建 .venv 并安装 requirements.txt。登录流程需要本地 Chrome 或 Chromium，并可访问 passport.weibo.com、weibo.com、m.weibo.cn。执行命令时优先从当前 skill 根目录调用 scripts/weibo-cli。
 license: Proprietary
 metadata:
@@ -25,7 +25,7 @@ metadata:
 ## 不要用于
 
 - 用户只是想润色微博文案，但还没确认要发布
-- 查询粉丝、关注、私信、收藏等当前 CLI 还不支持的能力
+- 查询私信、收藏等当前 CLI 还不支持的能力
 - 批量多账号管理
 
 说明：如果用户要“整理成 Markdown”，通常做法是先用本 skill 拉取微博数据，再由 agent 把结果整理成 Markdown 文本；这不需要 CLI 额外提供 `export` 子命令。
@@ -64,8 +64,15 @@ scripts/weibo-cli <subcommand> [...args]
 - 取消点赞：`scripts/weibo-cli unlike --weibo-id <id>`
 - 删除自己发布的微博：`scripts/weibo-cli delete --weibo-id <id>`
 - 查询转发：`scripts/weibo-cli reposts --weibo-id <id> --limit 20 --page 1`
+- 查看任意用户信息：`scripts/weibo-cli user --uid <UID>`
+- 查看当前账号关注列表：`scripts/weibo-cli following`
+- 查看指定用户关注列表：`scripts/weibo-cli following --uid <UID> --page 1`
+- 查看当前账号粉丝列表：`scripts/weibo-cli followers`
+- 查看指定用户粉丝列表：`scripts/weibo-cli followers --uid <UID> --page 2`
 
 说明：面向最终用户的对话回复默认仍优先使用文本格式；只有在需要稳定字段时才切到 `--json`。
+
+说明：`user`、`following`、`followers` 结果来自本地 TTL 缓存（用户信息 10 分钟、列表 5 分钟），重复查询同一对象不会重复发起网络请求。如需强制刷新，可在命令前加 `WEIBO_CACHE_DISABLED=1`。
 
 更完整的参数示例见 [references/commands.md](references/commands.md)。
 
@@ -81,6 +88,8 @@ scripts/weibo-cli <subcommand> [...args]
 8. 用户如果说“最近转发的微博”“我转发过什么”，优先使用 `list --only-reposts`，不要先列全量再手工筛选。
 9. 对发布、评论、点赞、取消点赞、删除这类会改变微博状态的操作，执行前必须先向用户确认具体动作和目标对象。
 10. 如果任务需要验证发布或评论结果，执行后再读一次 `show`、`comments` 或 `list` 做结果确认。
+11. 查询关注/粉丝列表时，若用户没有指定 UID，默认查询当前登录账号（`following` / `followers` 不传 `--uid` 即可）。
+12. `user`、`following`、`followers` 结果有缓存；若用户明确要求"最新数据"或"刷新"，在命令前加 `WEIBO_CACHE_DISABLED=1`。
 
 ## 完成前检查
 
@@ -93,6 +102,8 @@ scripts/weibo-cli <subcommand> [...args]
 - `comment` 成功时，终端应出现“评论成功”并返回评论 ID。
 - `like` / `unlike` / `delete` 成功时，应返回目标微博 ID 和操作结果说明。
 - `reposts` 成功时，输出应包含转发用户、时间、来源和正文；若无结果，应明确说明没有可返回的转发记录。
+- `user` 成功时，应看到昵称、UID、粉丝数、关注数、微博数，以及简介、认证信息（如有）。
+- `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；若无结果，应明确说明暂无记录。
 
 ## 已验证事实
 
