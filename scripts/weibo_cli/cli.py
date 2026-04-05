@@ -174,6 +174,9 @@ def build_parser() -> argparse.ArgumentParser:
     schedule_set_p.set_defaults(handler=handle_schedule_set)
     schedule_off_p = schedule_subparsers.add_parser("off", help="停用并删除定时策略", parents=[common_parser])
     schedule_off_p.set_defaults(handler=handle_schedule_off)
+    schedule_logs_p = schedule_subparsers.add_parser("logs", help="查看最近 sync 日志", parents=[common_parser])
+    schedule_logs_p.add_argument("--lines", default="50", help="显示最近 N 行（默认 50）")
+    schedule_logs_p.set_defaults(handler=handle_schedule_logs)
 
     skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills", parents=[common_parser])
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
@@ -519,12 +522,19 @@ def handle_search(args: argparse.Namespace) -> int:
 
 def handle_sync(args: argparse.Namespace) -> int:
     from .local_db import FeedDatabase
+    from .scheduler import rotate_log_if_needed, write_sync_status
     pages = parse_positive_integer_option(args.pages, "--pages")
+    rotate_log_if_needed()
     db = FeedDatabase()
+    result = None
     try:
         result = WeiboService.create_default().sync_feed(db, pages=pages)
+    except Exception as exc:  # noqa: BLE001
+        write_sync_status(success=False, error=str(exc))
+        raise
     finally:
         db.close()
+    write_sync_status(success=True, result=result)
     write_command_output(args, result, text_output=format_sync_result(result))
     return 0
 
@@ -607,6 +617,17 @@ def handle_schedule_off(args: argparse.Namespace) -> int:
         args, status,
         text_output="定时同步策略已停用并删除。\n" + format_schedule_status(status),
     )
+    return 0
+
+
+def handle_schedule_logs(args: argparse.Namespace) -> int:
+    from .scheduler import STDOUT_LOG, read_last_logs
+    lines = parse_positive_integer_option(args.lines, "--lines")
+    content = read_last_logs(lines=lines)
+    if not content:
+        sys.stdout.write(f"暂无日志（路径：{STDOUT_LOG}）\n")
+        return 0
+    sys.stdout.write(content + "\n")
     return 0
 
 

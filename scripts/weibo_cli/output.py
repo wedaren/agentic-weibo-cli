@@ -326,7 +326,7 @@ def format_local_posts(rows: list[dict[str, Any]], *, keyword: str | None = None
 
 
 def format_schedule_status(status: "Any") -> str:
-    """格式化定时 sync 策略状态。"""
+    """格式化定时 sync 策略状态（含上次执行结果）。"""
     lines = ["定时同步策略"]
     if not status.configured:
         lines.append("状态: 未配置")
@@ -338,7 +338,16 @@ def format_schedule_status(status: "Any") -> str:
         if status.pages is not None:
             lines.append(f"同步页数: {status.pages} 页（约 {status.pages * 20} 条）")
         lines.append(f"日志路径: {status.log_path}")
-        lines.append(f"Plist 路径: {status.plist_path}")
         if not status.loaded:
             lines.append("操作: 执行 `schedule set` 重新加载，或 `schedule off` 清除配置")
+    # 上次执行结果（无论是否配置定时，只要有状态文件就显示）
+    if status.last_run_at:
+        lines.append("─────────────────")
+        lines.append(f"上次执行: {status.last_run_at}")
+        if status.last_run_success is True:
+            added = status.last_run_added
+            lines.append(f"结果: 成功{f'，新增 {added} 条' if added is not None else ''}")
+        elif status.last_run_success is False:
+            err = status.last_run_error or "未知错误"
+            lines.append(f"结果: 失败 — {err}")
     return "\n".join(lines) + "\n"
