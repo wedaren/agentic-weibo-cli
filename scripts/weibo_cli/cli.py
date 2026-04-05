@@ -145,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.set_defaults(handler=handle_search)
 
     sync_parser = subparsers.add_parser("sync", help="同步关注用户时间线到本地数据库", parents=[common_parser])
-    sync_parser.add_argument("--pages", default="3", help="拉取页数（默认 3，每页约 20 条）")
+    sync_parser.add_argument("--pages", default="5", help="拉取页数（默认 5，每页约 20 条）")
     sync_parser.set_defaults(handler=handle_sync)
 
     local_parser = subparsers.add_parser("local", help="操作本地缓存的微博数据", parents=[common_parser])
@@ -154,6 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     local_search_p = local_subparsers.add_parser("search", help="在本地数据库中搜索微博", parents=[common_parser])
     local_search_p.add_argument("--keyword", required=True, help="搜索关键词")
     local_search_p.add_argument("--limit", default="20", help="最多返回条数（默认 20）")
+    local_search_p.add_argument("--days", default=None, help="仅返回最近 N 天内发布的帖子（按 created_at 过滤）")
     local_search_p.set_defaults(handler=handle_local_search)
     local_list_p = local_subparsers.add_parser("list", help="列出本地缓存的帖子", parents=[common_parser])
     local_list_p.add_argument("--uid", help="过滤指定用户 UID")
@@ -524,14 +525,17 @@ def handle_local_default(args: argparse.Namespace) -> int:
 def handle_local_search(args: argparse.Namespace) -> int:
     from .local_db import FeedDatabase
     limit = parse_positive_integer_option(args.limit, "--limit")
+    since_days: int | None = None
+    if getattr(args, "days", None) is not None:
+        since_days = parse_positive_integer_option(args.days, "--days")
     db = FeedDatabase()
     try:
-        rows = db.search(args.keyword, limit=limit)
+        rows = db.search(args.keyword, limit=limit, since_days=since_days)
     finally:
         db.close()
     write_command_output(
         args,
-        {"keyword": args.keyword, "total": len(rows), "items": rows},
+        {"keyword": args.keyword, "since_days": since_days, "total": len(rows), "items": rows},
         text_output=format_local_posts(rows, keyword=args.keyword),
     )
     return 0

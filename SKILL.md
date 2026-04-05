@@ -76,8 +76,10 @@ scripts/weibo-cli <subcommand> [...args]
 - 查看指定用户粉丝列表（单页）：`scripts/weibo-cli followers --uid <UID> --page 2`
 - 全网搜索微博：`scripts/weibo-cli search --keyword <关键词>`
 - 仅在关注用户中搜索微博：`scripts/weibo-cli search --keyword <关键词> --following-only`
-- 同步关注时间线到本地数据库：`scripts/weibo-cli sync`
+- 同步关注时间线到本地数据库：`scripts/weibo-cli sync`（默认 5 页 ≈ 100 条）
+- 同步更多页以获取更广历史覆盖：`scripts/weibo-cli sync --pages 10`
 - 在本地数据库中搜索：`scripts/weibo-cli local search --keyword <关键词>`
+- 在本地数据库中搜索（限最近 N 天）：`scripts/weibo-cli local search --keyword <关键词> --days 7`
 - 列出本地缓存帖子：`scripts/weibo-cli local list`
 - 本地数据库统计：`scripts/weibo-cli local stats`
 
@@ -105,10 +107,10 @@ scripts/weibo-cli <subcommand> [...args]
 12. `user`、`following`、`followers` 结果有缓存；若用户明确要求"最新数据"或"刷新"，在命令前加 `WEIBO_CACHE_DISABLED=1`。
 13. 需要获取完整关注/粉丝列表时（统计总数、全量与其他数据联动），使用 `--all-pages` 而不是手动循环翻页；JSON 的 `has_more=false` 表示已是全量。
 14. `search --following-only` 会在全网结果中过滤关注用户，自动翻页最多 5 页；若返回条数少于 `--limit`，说明关注用户在该关键词下发帖本来就少，属正常。
-15. `sync` 每次拉取首页时间线 N 页（默认 3 页，约 60 条），写入 `~/.local/share/weibo-cli/feed.db`，重复帖子自动跳过；`local search` 在本地库中做 LIKE 搜索，**无需联网**，适合离线分析关注用户的历史内容。
-16. 如用户想分析关注用户近期内容，应先确认本地库是否已同步（`local stats`），若总条数很少则先执行 `sync --pages 5` 初始化。
+15. `sync` 每次拉取首页时间线 N 页（默认 5 页，约 100 条），写入 `~/.local/share/weibo-cli/feed.db`，重复帖子自动跳过；`local search` 在本地库中做 LIKE 搜索，**无需联网**，适合离线分析关注用户的历史内容。`local search` 支持 `--days N` 限制最近 N 天的发帖。
+16. 用户想在关注用户中按关键词查找帖子时，**正确策略是 sync + local search**，而不是 `search --following-only`：`search --following-only` 仅从全网搜索结果中后置过滤，覆盖上限约 100 条，大量关注用户的帖子可能不在全网 top 100 而漏掉；`sync` 直接拉取关注时间线（私有 API），可拿到所有关注用户最近的帖子。推荐流程：先 `local stats` 确认数据量，若总条数 < 100 或 `newest_synced_at` 超过 1 小时，先执行 `sync --pages 10`，再 `local search --keyword <关键词> --days 7`。
 17. 查看某个用户最近发布的微博，使用 `list --uid <UID>`；`list` 不传 `--uid` 则只查当前登录账号自己的微博。**不要**尝试 `search --keyword "from:<UID>"`，该语法不受支持。
-18. 用户明确说"我关注的用户里"、"关注的人发了"、"关注用户中"等语境时，**必须**使用 `search --keyword <关键词> --following-only`，不要用无过滤的全网搜索；若本地库已有数据（`local stats` 总条数 > 0），也可优先用 `local search --keyword <关键词>` 避免联网。
+18. 用户明确说"我关注的用户里"、"关注的人发了"、"关注用户中"等语境时，优先走 `sync + local search` 流程（见规则 16），不要用无过滤的全网搜索；仅当用户明确需要"最新几分钟内"的实时结果时，才考虑 `search --following-only` 作为补充。
 19. 搜索非中文关键词（尤其是人名）时，若返回 0 结果，在报告"无结果"前**必须**主动尝试 1–2 个最可能的正确拼写并重新执行搜索；不要等用户手动纠正后才重试。例：用户输入 "kaaparthy" / "karparthy" → 应自动尝试 "karpathy"。
 20. 用户用简短词（"好的"、"是"、"行"、"ok"、"嗯"）回复上一轮提出的操作建议时，直接执行其中**最有价值**的那个操作，不要再次列出选项或征求选择。
 ## 完成前检查
@@ -126,7 +128,8 @@ scripts/weibo-cli <subcommand> [...args]
 - `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；`--all-pages` 时还应看到合计条数；若 `items` 为空列表（exit 0），告知用户"未能获取到关注/粉丝列表，该功能可能处于不可用状态"，并报告给开发者。
 - `search` 成功时，应看到带编号的微博列表（微博 ID、作者、互动计数、正文）；若无结果，应明确说明未找到相关微博。
 - `sync` 成功时，应看到新增条数、跳过条数、过期清理条数、数据库总计及路径。
-- `local search` / `local list` 成功时，应看到带编号的微博列表（含"同步"时间戳）；若无结果，应说明本地数据库中未找到相关内容。
+- `local search` 成功时，应看到带编号的微博列表（含"同步"时间戳）；若无结果，应说明本地数据库中未找到相关内容，并建议先执行 `sync --pages 10` 后重试；`--days N` 生效时，还会输出 `since_days` 字段。
+- `local list` 成功时，应看到带编号的微博列表（含"同步"时间戳）；若无结果，说明本地数据库中无符合条件的内容。
 - `local stats` 成功时，应看到总条数、覆盖用户数、最早/最新同步时间、保留天数及路径。
 
 ## 已验证事实

@@ -419,11 +419,11 @@ class WeiboService:
         items = [normalize_mblog(s) for s in statuses]
         return [item for item in items if item is not None]
 
-    def sync_feed(self, db: FeedDatabase, *, pages: int = 3) -> SyncResult:
+    def sync_feed(self, db: FeedDatabase, *, pages: int = 5) -> SyncResult:
         """增量同步关注用户时间线到本地数据库。
 
         策略：
-        - 拉取 pages 页（默认 3 页 ≈ 60 条），逐条 INSERT OR IGNORE 去重
+        - 拉取 pages 页（默认 5 页 ≈ 100 条），逐条 INSERT OR IGNORE 去重
         - 每页若返回空则提前终止
         - 同步完成后清理超期记录（保留 RETENTION_DAYS 天）
         """

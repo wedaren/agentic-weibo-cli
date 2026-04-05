@@ -104,17 +104,29 @@ class FeedDatabase:
         self._conn.commit()
         return cur.rowcount
 
-    def search(self, keyword: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        """在 text / repost_text / user_name 中 LIKE 搜索，按发帖时间降序返回。"""
+    def search(self, keyword: str, *, limit: int = 20, since_days: int | None = None) -> list[dict[str, Any]]:
+        """在 text / repost_text 中 LIKE 搜索，按发帖时间降序返回。
+
+        since_days: 若指定，仅返回 created_at 在最近 N 天内的帖子。
+        """
         pattern = f"%{keyword}%"
+        params: list = [pattern, pattern]
+        date_clause = ""
+        if since_days is not None and since_days > 0:
+            cutoff = time.strftime(
+                "%Y-%m-%dT%H:%M:%S",
+                time.localtime(time.time() - since_days * 86400),
+            )
+            date_clause = " AND created_at >= ?"
+            params.append(cutoff)
+        params.append(limit)
         rows = self._conn.execute(
-            """SELECT * FROM posts
-               WHERE text LIKE ?
-                  OR repost_text LIKE ?
-                  OR user_name LIKE ?
+            f"""SELECT * FROM posts
+               WHERE (text LIKE ? OR repost_text LIKE ?)
+               {date_clause}
                ORDER BY created_at DESC
                LIMIT ?""",
-            (pattern, pattern, pattern, limit),
+            params,
         ).fetchall()
         return [dict(row) for row in rows]
 
