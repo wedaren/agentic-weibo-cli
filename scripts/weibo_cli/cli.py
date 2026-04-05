@@ -15,7 +15,7 @@ from .auth import LoginResult, WeiboAuthService
 from .api_client import WeiboApiError, WeiboAuthError, WeiboNetworkError
 from .browser_login import DEFAULT_LOGIN_URL, assert_browser_automation_available, run_browser_login
 from .local_config import get_local_config_path
-from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_local_posts, format_local_stats, format_post_result, format_reposts, format_search_results, format_session_status, format_sync_result, format_user_profile, format_weibo_detail, format_weibo_list
+from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_local_posts, format_local_stats, format_post_result, format_reposts, format_schedule_status, format_search_results, format_session_status, format_sync_result, format_user_profile, format_weibo_detail, format_weibo_list
 from .service import WeiboService
 from .session import SessionData, SessionStatus
 from .skill_catalog import format_skill_document, format_skill_list, format_skill_prompt_xml, format_skill_validation, load_skills
@@ -163,6 +163,17 @@ def build_parser() -> argparse.ArgumentParser:
     local_list_p.set_defaults(handler=handle_local_list)
     local_stats_p = local_subparsers.add_parser("stats", help="查看本地数据库统计", parents=[common_parser])
     local_stats_p.set_defaults(handler=handle_local_stats)
+
+    schedule_parser = subparsers.add_parser("schedule", help="管理每日自动 sync 定时策略（macOS LaunchAgent）", parents=[common_parser])
+    schedule_subparsers = schedule_parser.add_subparsers(dest="schedule_command")
+    schedule_parser.set_defaults(handler=handle_schedule_status)
+    schedule_set_p = schedule_subparsers.add_parser("set", help="启用或更新定时策略", parents=[common_parser])
+    schedule_set_p.add_argument("--hour", default="8", help="触发小时（本地时间，默认 8）")
+    schedule_set_p.add_argument("--minute", default="7", help="触发分钟（默认 7）")
+    schedule_set_p.add_argument("--pages", default="10", help="每次 sync 拉取页数（默认 10）")
+    schedule_set_p.set_defaults(handler=handle_schedule_set)
+    schedule_off_p = schedule_subparsers.add_parser("off", help="停用并删除定时策略", parents=[common_parser])
+    schedule_off_p.set_defaults(handler=handle_schedule_off)
 
     skills_parser = subparsers.add_parser("skills", help="列出或查看当前仓库提供的 skills", parents=[common_parser])
     skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
@@ -565,6 +576,37 @@ def handle_local_stats(args: argparse.Namespace) -> int:
     finally:
         db.close()
     write_command_output(args, stats, text_output=format_local_stats(stats))
+    return 0
+
+
+def handle_schedule_status(args: argparse.Namespace) -> int:
+    from .scheduler import WeiboScheduler
+    status = WeiboScheduler().get_status()
+    write_command_output(args, status, text_output=format_schedule_status(status))
+    return 0
+
+
+def handle_schedule_set(args: argparse.Namespace) -> int:
+    from .scheduler import WeiboScheduler
+    hour = parse_positive_integer_option(args.hour, "--hour")
+    minute = parse_positive_integer_option(args.minute, "--minute")
+    pages = parse_positive_integer_option(args.pages, "--pages")
+    if not (0 <= hour <= 23):
+        raise CliUsageError("--hour 必须在 0–23 之间。")
+    if not (0 <= minute <= 59):
+        raise CliUsageError("--minute 必须在 0–59 之间。")
+    status = WeiboScheduler().enable(hour=hour, minute=minute, pages=pages)
+    write_command_output(args, status, text_output=format_schedule_status(status))
+    return 0
+
+
+def handle_schedule_off(args: argparse.Namespace) -> int:
+    from .scheduler import WeiboScheduler
+    status = WeiboScheduler().disable()
+    write_command_output(
+        args, status,
+        text_output="定时同步策略已停用并删除。\n" + format_schedule_status(status),
+    )
     return 0
 
 

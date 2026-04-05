@@ -82,6 +82,10 @@ scripts/weibo-cli <subcommand> [...args]
 - 在本地数据库中搜索（限最近 N 天）：`scripts/weibo-cli local search --keyword <关键词> --days 7`
 - 列出本地缓存帖子：`scripts/weibo-cli local list`
 - 本地数据库统计：`scripts/weibo-cli local stats`
+- 查看定时同步策略状态：`scripts/weibo-cli schedule`
+- 启用每日定时 sync（默认 08:07，10 页）：`scripts/weibo-cli schedule set`
+- 指定时间和页数：`scripts/weibo-cli schedule set --hour 8 --minute 30 --pages 10`
+- 停用并删除定时策略：`scripts/weibo-cli schedule off`
 
 说明：面向最终用户的对话回复默认仍优先使用文本格式；只有在需要稳定字段时才切到 `--json`。
 
@@ -113,6 +117,8 @@ scripts/weibo-cli <subcommand> [...args]
 18. 用户明确说"我关注的用户里"、"关注的人发了"、"关注用户中"等语境时，优先走 `sync + local search` 流程（见规则 16），不要用无过滤的全网搜索；仅当用户明确需要"最新几分钟内"的实时结果时，才考虑 `search --following-only` 作为补充。
 19. 搜索非中文关键词（尤其是人名）时，若返回 0 结果，在报告"无结果"前**必须**主动尝试 1–2 个最可能的正确拼写并重新执行搜索；不要等用户手动纠正后才重试。例：用户输入 "kaaparthy" / "karparthy" → 应自动尝试 "karpathy"。
 20. 用户用简短词（"好的"、"是"、"行"、"ok"、"嗯"）回复上一轮提出的操作建议时，直接执行其中**最有价值**的那个操作，不要再次列出选项或征求选择。
+21. 用户询问"有没有开定时同步""定时任务状态""有没有每天自动 sync"时，先执行 `schedule` 查看当前策略，再根据结果给出建议。
+22. `schedule` 仅在 macOS 下可用（依赖 launchctl）；在非 macOS 环境下执行会报错，告知用户该功能暂不支持当前系统。
 ## 完成前检查
 
 - `status` 成功时，应看到“已配置 / 可直接使用 / 来源 / UID / 更新时间”等状态信息。
@@ -128,6 +134,9 @@ scripts/weibo-cli <subcommand> [...args]
 - `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；`--all-pages` 时还应看到合计条数；若 `items` 为空列表（exit 0），告知用户"未能获取到关注/粉丝列表，该功能可能处于不可用状态"，并报告给开发者。
 - `search` 成功时，应看到带编号的微博列表（微博 ID、作者、互动计数、正文）；若无结果，应明确说明未找到相关微博。
 - `sync` 成功时，应看到新增条数、跳过条数、过期清理条数、数据库总计及路径。
+- `schedule` 成功时，应看到"状态（已启用/未配置）"、触发时间、同步页数、日志路径等信息。
+- `schedule set` 成功时，状态应显示"已启用"，并确认触发时间和页数。
+- `schedule off` 成功时，应看到"定时同步策略已停用并删除"并确认状态变为"未配置"。
 - `local search` 成功时，应看到带编号的微博列表（含"同步"时间戳）；若无结果，应说明本地数据库中未找到相关内容，并建议先执行 `sync --pages 10` 后重试；`--days N` 生效时，还会输出 `since_days` 字段。
 - `local list` 成功时，应看到带编号的微博列表（含"同步"时间戳）；若无结果，说明本地数据库中无符合条件的内容。
 - `local stats` 成功时，应看到总条数、覆盖用户数、最早/最新同步时间、保留天数及路径。

@@ -323,3 +323,22 @@ def format_local_posts(rows: list[dict[str, Any]], *, keyword: str | None = None
         else:
             lines.append(row.get("text") or "(空正文)")
     return "\n".join(lines) + "\n"
+
+
+def format_schedule_status(status: "Any") -> str:
+    """格式化定时 sync 策略状态。"""
+    lines = ["定时同步策略"]
+    if not status.configured:
+        lines.append("状态: 未配置")
+        lines.append("操作: 执行 `schedule set` 启用每日自动同步")
+    else:
+        lines.append(f"状态: {'已启用' if status.loaded else '已配置但未加载'}")
+        if status.hour is not None and status.minute is not None:
+            lines.append(f"触发时间: 每天 {status.hour:02d}:{status.minute:02d}")
+        if status.pages is not None:
+            lines.append(f"同步页数: {status.pages} 页（约 {status.pages * 20} 条）")
+        lines.append(f"日志路径: {status.log_path}")
+        lines.append(f"Plist 路径: {status.plist_path}")
+        if not status.loaded:
+            lines.append("操作: 执行 `schedule set` 重新加载，或 `schedule off` 清除配置")
+    return "\n".join(lines) + "\n"
