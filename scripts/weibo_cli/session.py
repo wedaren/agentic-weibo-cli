@@ -41,7 +41,8 @@ class SessionData:
         return tuple(cookie.name for cookie in select_cookie_header_cookies(self.cookies))
 
     def csrf_token(self) -> str | None:
-        for key in ("XSRF-TOKEN", "X-CSRF-TOKEN"):
+        # 优先使用常见的 XSRF cookie；若无则回退到 SCF（浏览器中常见的鉴权相关 cookie）
+        for key in ("XSRF-TOKEN", "X-CSRF-TOKEN", "SCF"):
             for cookie in select_cookie_header_cookies(self.cookies):
                 if cookie.name == key:
                     return cookie.value

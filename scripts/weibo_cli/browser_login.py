@@ -183,3 +183,32 @@ def probe_uid(cookies: tuple[CookieRecord, ...]) -> dict[str, object]:
         return {"uid": result.uid, "login": result.login}
     except WeiboAuthError:
         return {"uid": None, "login": False}
+
+
+def try_headless_reuse(
+    browser_path: str | None = None,
+    user_data_dir: str | None = None,
+    login_url: str | None = None,
+) -> BrowserLoginResult | None:
+    """仅使用无头浏览器尝试复用本地浏览器资料中的登录态。
+
+    - 仅在 headless 模式下打开持久化 context 并运行复用检查。
+    - 不会在复用失败时弹出可见浏览器窗口。
+    - 若找到有效登录态，返回 BrowserLoginResult；否则返回 None。
+    """
+    from playwright.sync_api import sync_playwright
+
+    executable_path = find_browser_executable(browser_path)
+    resolved_login_url = (login_url or "").strip() or DEFAULT_LOGIN_URL
+    profile_dir = resolve_browser_profile_dir(user_data_dir)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as playwright:
+        context = playwright.chromium.launch_persistent_context(
+            str(profile_dir), executable_path=executable_path, headless=True
+        )
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+            return try_reuse_existing_login(context, page, resolved_login_url, str(profile_dir))
+        finally:
+            context.close()

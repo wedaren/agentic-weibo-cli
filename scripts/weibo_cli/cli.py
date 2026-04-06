@@ -329,7 +329,20 @@ def _recover_session(auth: WeiboAuthService) -> WeiboService | None:
     成功返回新的 WeiboService；无法恢复时向 stderr 写错误信息并返回 None。
     """
     status = auth.inspect()
-    if not status.configured or status.usable:
+    if status.usable:
+        return None
+
+    # 会话不可用时，优先尝试无头浏览器复用（适用于未配置或已配置但失效的情形）。
+    try:
+        result = auth.try_persist_headless_reuse(browser_path=None, user_data_dir=None)
+        if result:
+            sys.stdout.write(format_login_result(result))
+            return WeiboService.create_default()
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"尝试无头复用浏览器登录失败：{e}\n")
+
+    # 如果本地未配置持久化登录态，且无头复用也失败，则直接退出恢复流程
+    if not status.configured:
         return None
 
     cookie_env = os.environ.get("WEIBO_COOKIE") or None

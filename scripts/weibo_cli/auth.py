@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .api_client import WeiboApiClient, WeiboAuthError
-from .browser_login import BrowserLoginResult, run_browser_login
+from .browser_login import BrowserLoginResult, run_browser_login, try_headless_reuse
 from .session import SessionData, SessionStatus, SessionStore, now_iso, parse_cookie_header
 
 
@@ -151,4 +151,29 @@ class WeiboAuthService:
             profile_dir=profile_dir,
             final_url=final_url,
             cookie_names=cookie_names,
+        )
+
+    def try_persist_headless_reuse(self, *, browser_path: str | None = None, user_data_dir: str | None = None) -> LoginResult | None:
+        """尝试仅使用无头浏览器复用现有浏览器资料中的登录态，并在成功时持久化。
+
+        - 仅在本地浏览器资料中找到有效登录态时返回 LoginResult。
+        - 若未找到有效登录态，返回 None（不会弹出可见浏览器）。
+        """
+        browser_result = try_headless_reuse(browser_path=browser_path, user_data_dir=user_data_dir)
+        if browser_result is None:
+            return None
+        session = SessionData(
+            uid=browser_result.uid,
+            login_url=browser_result.login_url,
+            updated_at=now_iso(),
+            source="local",
+            cookies=browser_result.cookies,
+        )
+        return self._persist_validated_session(
+            session=session,
+            source_label="浏览器 headless 复用",
+            reused_existing_login=browser_result.reused_existing_login,
+            profile_dir=browser_result.profile_dir,
+            final_url=browser_result.final_url,
+            cookie_names=browser_result.cookie_names,
         )

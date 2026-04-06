@@ -11,6 +11,7 @@ from .normalizers import (
     normalize_required_text,
     stringify_id,
 )
+from .api_client import WeiboApiClient
 
 
 class WriteMixin:
@@ -109,24 +110,57 @@ class WriteMixin:
 
     def delete_weibo(self, weibo_id: str) -> WeiboActionResult:
         normalized_weibo_id = normalize_required_text(weibo_id, "微博 ID")
-        response = self.client.request_json(  # type: ignore[attr-defined]
-            "/api/statuses/destroy",
-            method="POST",
-            headers={
-                "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "x-requested-with": "XMLHttpRequest",
-                "origin": "https://m.weibo.cn",
-                "referer": f"https://m.weibo.cn/status/{normalized_weibo_id}",
-            },
-            data={"id": normalized_weibo_id},
-        )
-        assert_api_success(response, "删除微博")
-        return WeiboActionResult(
-            action="删除成功",
-            weibo_id=normalized_weibo_id,
-            message=normalize_optional_string(response.get("msg") or response.get("message")) or "已删除这条微博。",
-            url=None,
-        )
+        try:
+            response = self.client.request_json(  # type: ignore[attr-defined]
+                "/api/statuses/destroy",
+                method="POST",
+                headers={
+                    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "x-requested-with": "XMLHttpRequest",
+                    "origin": "https://m.weibo.cn",
+                    "referer": f"https://m.weibo.cn/status/{normalized_weibo_id}",
+                },
+                data={"id": normalized_weibo_id},
+            )
+            assert_api_success(response, "删除微博")
+            return WeiboActionResult(
+                action="删除成功",
+                weibo_id=normalized_weibo_id,
+                message=normalize_optional_string(response.get("msg") or response.get("message")) or "已删除这条微博。",
+                url=None,
+            )
+        except RuntimeError as err:
+            # 如果服务端返回提示类似“链接 ... 无效”的错误，可能是对 Origin/Referer 校验比较严格。
+            # 这种情况下尝试以 weibo.com origin/Referer 重试一次（兼容某些站点校验策略）。
+            err_text = str(err) or ""
+            trigger_tokens = ("链接", "无效", "Invalid URL", "invalid url")
+            if any(tok in err_text for tok in trigger_tokens):
+                try:
+                    fallback_headers = {
+                        "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+                        "x-requested-with": "XMLHttpRequest",
+                        "origin": "https://weibo.com",
+                        "referer": f"https://weibo.com/status/{normalized_weibo_id}",
+                    }
+                    # 有些场景下 weibo.com 的 ajax 路径更可靠，构造临时 client 指向 weibo.com 并调用 /ajax/statuses/destroy
+                    alt_client = WeiboApiClient(session=self.client.session, store=getattr(self.client, "store", None), base_url="https://weibo.com")
+                    response2 = alt_client.request_json(  # type: ignore[attr-defined]
+                        "/ajax/statuses/destroy",
+                        method="POST",
+                        headers=fallback_headers,
+                        data={"id": normalized_weibo_id},
+                    )
+                    assert_api_success(response2, "删除微博")
+                    return WeiboActionResult(
+                        action="删除成功",
+                        weibo_id=normalized_weibo_id,
+                        message=normalize_optional_string(response2.get("msg") or response2.get("message")) or "已删除这条微博（使用回退路径）。",
+                        url=None,
+                    )
+                except Exception:
+                    # 回退重试也失败，回退到原始错误以便上层显示完整信息
+                    raise
+            raise
 
 
 # 延迟导入避免循环
