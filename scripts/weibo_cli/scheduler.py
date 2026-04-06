@@ -30,6 +30,7 @@ MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB
 _DEFAULT_HOUR = 8
 _DEFAULT_MINUTE = 7
 _DEFAULT_PAGES = 10
+_DEFAULT_RETENTION_DAYS = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +39,9 @@ class ScheduleStatus:
     loaded: bool                # launchctl 已加载
     hour: int | None            # 每天触发时刻（小时）
     minute: int | None          # 每天触发时刻（分钟）
-    pages: int | None           # sync 拉取页数
+    mode: str | None            # 'timeline' 或 'per_user'
+    pages: int | None           # sync 拉取页数（timeline 模式）或每用户页数（per_user 模式）
+    retention_days: int | None  # 本地数据保留天数
     plist_path: str
     log_path: str
     last_run_at: str | None     # 上次执行时间
@@ -93,7 +96,9 @@ class WeiboScheduler:
                 loaded=False,
                 hour=None,
                 minute=None,
+                mode=None,
                 pages=None,
+                retention_days=None,
                 plist_path=str(PLIST_PATH),
                 log_path=str(STDOUT_LOG),
                 last_run_at=last_run_at,
@@ -101,13 +106,15 @@ class WeiboScheduler:
                 last_run_added=last_run_added,
                 last_run_error=last_run_error,
             )
-        hour, minute, pages = self._parse_plist()
+        hour, minute, mode, pages, retention_days = self._parse_plist()
         return ScheduleStatus(
             configured=True,
             loaded=self._is_loaded(),
             hour=hour,
             minute=minute,
+            mode=mode,
             pages=pages,
+            retention_days=retention_days,
             plist_path=str(PLIST_PATH),
             log_path=str(STDOUT_LOG),
             last_run_at=last_run_at,
@@ -122,13 +129,15 @@ class WeiboScheduler:
         hour: int = _DEFAULT_HOUR,
         minute: int = _DEFAULT_MINUTE,
         pages: int = _DEFAULT_PAGES,
+        mode: str = "timeline",
+        retention_days: int = _DEFAULT_RETENTION_DAYS,
     ) -> ScheduleStatus:
         """写入 plist 并 launchctl load。若已加载，先 unload 再重建。"""
         if self._is_loaded():
             self._unload()
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
-        self._write_plist(hour=hour, minute=minute, pages=pages)
+        self._write_plist(hour=hour, minute=minute, pages=pages, mode=mode, retention_days=retention_days)
         self._load()
         return self.get_status()
 
@@ -158,15 +167,22 @@ class WeiboScheduler:
         except Exception:  # noqa: BLE001
             return None, None, None, None
 
-    def _write_plist(self, *, hour: int, minute: int, pages: int) -> None:
+    def _write_plist(
+        self, *, hour: int, minute: int, pages: int,
+        mode: str = "timeline", retention_days: int = _DEFAULT_RETENTION_DAYS,
+    ) -> None:
         from xml.sax.saxutils import escape as xml_escape
         skill_dir = str(Path(__file__).resolve().parents[2])
+        if mode == "per_user":
+            sync_args = f"sync --per-user --pages-per-user {pages} --retention-days {retention_days}"
+        else:
+            sync_args = f"sync --pages {pages} --retention-days {retention_days}"
         # Shell 一行命令：先轮转日志，再执行 sync，追加输出到日志文件
         shell_cmd = (
             f"LOG={STDOUT_LOG}; "
             f"MAXSIZE={MAX_LOG_BYTES}; "
             f'[ -f "$LOG" ] && [ $(wc -c < "$LOG") -gt $MAXSIZE ] && mv "$LOG" "${{LOG}}.1"; '
-            f'cd {skill_dir} && scripts/weibo-cli sync --pages {pages} >> "$LOG" 2>&1'
+            f'cd {skill_dir} && scripts/weibo-cli {sync_args} >> "$LOG" 2>&1'
         )
         plist_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -194,19 +210,23 @@ class WeiboScheduler:
 """
         PLIST_PATH.write_text(plist_xml, encoding="utf-8")
 
-    def _parse_plist(self) -> tuple[int | None, int | None, int | None]:
+    def _parse_plist(self) -> tuple[int | None, int | None, str, int | None, int | None]:
         try:
             text = PLIST_PATH.read_text(encoding="utf-8")
             hour_m = re.search(r"<key>Hour</key>\s*<integer>(\d+)</integer>", text)
             minute_m = re.search(r"<key>Minute</key>\s*<integer>(\d+)</integer>", text)
-            pages_m = re.search(r"sync --pages (\d+)", text)
+            mode = "per_user" if "--per-user" in text else "timeline"
+            pages_m = re.search(r"--pages-per-user (\d+)", text) or re.search(r"sync --pages (\d+)", text)
+            retention_m = re.search(r"--retention-days (\d+)", text)
             return (
                 int(hour_m.group(1)) if hour_m else None,
                 int(minute_m.group(1)) if minute_m else None,
+                mode,
                 int(pages_m.group(1)) if pages_m else None,
+                int(retention_m.group(1)) if retention_m else None,
             )
         except Exception:  # noqa: BLE001
-            return None, None, None
+            return None, None, "timeline", None, None
 
     def _is_loaded(self) -> bool:
         try:

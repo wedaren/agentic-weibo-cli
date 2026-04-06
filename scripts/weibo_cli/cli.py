@@ -15,7 +15,7 @@ from .auth import LoginResult, WeiboAuthService
 from .api_client import WeiboApiError, WeiboAuthError, WeiboNetworkError
 from .browser_login import DEFAULT_LOGIN_URL, assert_browser_automation_available, run_browser_login
 from .local_config import get_local_config_path
-from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_local_posts, format_local_stats, format_post_result, format_reposts, format_schedule_status, format_search_results, format_session_status, format_sync_result, format_user_profile, format_weibo_detail, format_weibo_list
+from .output import format_action_result, format_comment_result, format_comments, format_follow_list, format_json_output, format_local_posts, format_local_stats, format_per_user_sync_result, format_post_result, format_reposts, format_schedule_status, format_search_results, format_session_status, format_sync_log, format_sync_result, format_user_profile, format_weibo_detail, format_weibo_list
 from .service import WeiboService
 from .session import SessionData, SessionStatus
 from .skill_catalog import format_skill_document, format_skill_list, format_skill_prompt_xml, format_skill_validation, load_skills
@@ -145,7 +145,14 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.set_defaults(handler=handle_search)
 
     sync_parser = subparsers.add_parser("sync", help="同步关注用户时间线到本地数据库", parents=[common_parser])
-    sync_parser.add_argument("--pages", default="5", help="拉取页数（默认 5，每页约 20 条）")
+    sync_parser.add_argument("--pages", default="5", help="拉取页数（默认 5，每页约 20 条）；仅限时间线模式")
+    sync_parser.add_argument("--per-user", action="store_true", help="逐用户模式：遍历全部关注者，逐一抓取其最近微博")
+    sync_parser.add_argument("--pages-per-user", default="3", help="--per-user：每位用户拉取页数（默认 3）")
+    sync_parser.add_argument("--delay-min", default="1.0", help="--per-user：用户间最短随机延迟秒数（默认 1.0）")
+    sync_parser.add_argument("--delay-max", default="3.0", help="--per-user：用户间最长随机延迟秒数（默认 3.0）")
+    sync_parser.add_argument("--skip-hours", default="6", help="--per-user：跳过 N 小时内已同步的用户（默认 6）")
+    sync_parser.add_argument("--force", action="store_true", help="--per-user：忽略 skip-hours，强制重新同步所有用户")
+    sync_parser.add_argument("--retention-days", default="7", help="本地数据保留天数（默认 7）；超期记录在 purge 阶段删除")
     sync_parser.set_defaults(handler=handle_sync)
 
     local_parser = subparsers.add_parser("local", help="操作本地缓存的微博数据", parents=[common_parser])
@@ -155,7 +162,11 @@ def build_parser() -> argparse.ArgumentParser:
     local_search_p.add_argument("--keyword", required=True, help="搜索关键词")
     local_search_p.add_argument("--limit", default="20", help="最多返回条数（默认 20）")
     local_search_p.add_argument("--days", default=None, help="仅返回最近 N 天内发布的帖子（按 created_at 过滤）")
+    local_search_p.add_argument("--uid", default=None, help="仅返回指定 UID 用户的帖子")
+    local_search_p.add_argument("--user-name", default=None, help="仅返回指定昵称用户的帖子（精确匹配）")
     local_search_p.set_defaults(handler=handle_local_search)
+    local_sync_log_p = local_subparsers.add_parser("sync-log", help="查看逐用户同步覆盖日志", parents=[common_parser])
+    local_sync_log_p.set_defaults(handler=handle_local_sync_log)
     local_list_p = local_subparsers.add_parser("list", help="列出本地缓存的帖子", parents=[common_parser])
     local_list_p.add_argument("--uid", help="过滤指定用户 UID")
     local_list_p.add_argument("--user-name", help="过滤指定用户昵称（精确匹配）")
@@ -171,6 +182,9 @@ def build_parser() -> argparse.ArgumentParser:
     schedule_set_p.add_argument("--hour", default="8", help="触发小时（本地时间，默认 8）")
     schedule_set_p.add_argument("--minute", default="7", help="触发分钟（默认 7）")
     schedule_set_p.add_argument("--pages", default="10", help="每次 sync 拉取页数（默认 10）")
+    schedule_set_p.add_argument("--mode", default="timeline", choices=["timeline", "per-user"],
+        help="同步模式：timeline（关注时间线，默认）或 per-user（逐用户深度同步）")
+    schedule_set_p.add_argument("--retention-days", default="7", help="本地数据保留天数（默认 7）")
     schedule_set_p.set_defaults(handler=handle_schedule_set)
     schedule_off_p = schedule_subparsers.add_parser("off", help="停用并删除定时策略", parents=[common_parser])
     schedule_off_p.set_defaults(handler=handle_schedule_off)
@@ -523,19 +537,44 @@ def handle_search(args: argparse.Namespace) -> int:
 def handle_sync(args: argparse.Namespace) -> int:
     from .local_db import FeedDatabase
     from .scheduler import rotate_log_if_needed, write_sync_status
-    pages = parse_positive_integer_option(args.pages, "--pages")
     rotate_log_if_needed()
     db = FeedDatabase()
     result = None
+    text_output = ""
     try:
-        result = WeiboService.create_default().sync_feed(db, pages=pages)
+        svc = WeiboService.create_default()
+        retention_days = parse_positive_integer_option(args.retention_days, "--retention-days")
+        if getattr(args, "per_user", False):
+            pages_per_user = parse_positive_integer_option(args.pages_per_user, "--pages-per-user")
+            skip_hours = parse_positive_integer_option(args.skip_hours, "--skip-hours")
+            try:
+                delay_min = float(args.delay_min)
+                delay_max = float(args.delay_max)
+            except ValueError as e:
+                raise CliUsageError("--delay-min / --delay-max 必须是数字。") from e
+            if delay_min < 0 or delay_max < delay_min:
+                raise CliUsageError("--delay-min 必须 >= 0，且不大于 --delay-max。")
+            result = svc.sync_per_user(
+                db,
+                pages_per_user=pages_per_user,
+                delay_min=delay_min,
+                delay_max=delay_max,
+                skip_hours=skip_hours,
+                force=args.force,
+                retention_days=retention_days,
+            )
+            text_output = format_per_user_sync_result(result)
+        else:
+            pages = parse_positive_integer_option(args.pages, "--pages")
+            result = svc.sync_feed(db, pages=pages, retention_days=retention_days)
+            text_output = format_sync_result(result)
     except Exception as exc:  # noqa: BLE001
         write_sync_status(success=False, error=str(exc))
         raise
     finally:
         db.close()
     write_sync_status(success=True, result=result)
-    write_command_output(args, result, text_output=format_sync_result(result))
+    write_command_output(args, result, text_output=text_output)
     return 0
 
 
@@ -549,15 +588,19 @@ def handle_local_search(args: argparse.Namespace) -> int:
     since_days: int | None = None
     if getattr(args, "days", None) is not None:
         since_days = parse_positive_integer_option(args.days, "--days")
+    uid: str | None = (getattr(args, "uid", None) or "").strip() or None
+    user_name: str | None = (getattr(args, "user_name", None) or "").strip() or None
+    user_filter = uid or user_name  # 用于输出标注
     db = FeedDatabase()
     try:
-        rows = db.search(args.keyword, limit=limit, since_days=since_days)
+        rows = db.search(args.keyword, limit=limit, since_days=since_days, user_id=uid, user_name=user_name)
     finally:
         db.close()
     write_command_output(
         args,
-        {"keyword": args.keyword, "since_days": since_days, "total": len(rows), "items": rows},
-        text_output=format_local_posts(rows, keyword=args.keyword),
+        {"keyword": args.keyword, "since_days": since_days, "uid": uid, "user_name": user_name,
+         "total": len(rows), "items": rows},
+        text_output=format_local_posts(rows, keyword=args.keyword, user_filter=user_filter),
     )
     return 0
 
@@ -589,6 +632,17 @@ def handle_local_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_local_sync_log(args: argparse.Namespace) -> int:
+    from .local_db import FeedDatabase
+    db = FeedDatabase()
+    try:
+        rows = db.get_sync_log()
+    finally:
+        db.close()
+    write_command_output(args, {"total": len(rows), "items": rows}, text_output=format_sync_log(rows))
+    return 0
+
+
 def handle_schedule_status(args: argparse.Namespace) -> int:
     from .scheduler import WeiboScheduler
     status = WeiboScheduler().get_status()
@@ -601,11 +655,13 @@ def handle_schedule_set(args: argparse.Namespace) -> int:
     hour = parse_positive_integer_option(args.hour, "--hour")
     minute = parse_positive_integer_option(args.minute, "--minute")
     pages = parse_positive_integer_option(args.pages, "--pages")
+    retention_days = parse_positive_integer_option(args.retention_days, "--retention-days")
     if not (0 <= hour <= 23):
         raise CliUsageError("--hour 必须在 0–23 之间。")
     if not (0 <= minute <= 59):
         raise CliUsageError("--minute 必须在 0–59 之间。")
-    status = WeiboScheduler().enable(hour=hour, minute=minute, pages=pages)
+    mode = args.mode.replace("-", "_")  # "per-user" → "per_user"
+    status = WeiboScheduler().enable(hour=hour, minute=minute, pages=pages, mode=mode, retention_days=retention_days)
     write_command_output(args, status, text_output=format_schedule_status(status))
     return 0
 

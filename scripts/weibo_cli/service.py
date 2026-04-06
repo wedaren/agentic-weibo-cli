@@ -26,6 +26,7 @@ from .models import (  # noqa: F401
     CommentItem,
     FollowItem,
     ListWeiboItem,
+    PerUserSyncResult,
     PostWeiboResult,
     RepostItem,
     RepostedStatus,

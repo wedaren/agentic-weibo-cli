@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS posts (
 CREATE INDEX IF NOT EXISTS idx_posts_user_id    ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at);
 CREATE INDEX IF NOT EXISTS idx_posts_synced_at  ON posts(synced_at);
+
+CREATE TABLE IF NOT EXISTS user_sync_log (
+    user_id        TEXT PRIMARY KEY,
+    last_synced_at TEXT NOT NULL,
+    last_added     INTEGER DEFAULT 0
+);
 """
 
 
@@ -104,26 +110,42 @@ class FeedDatabase:
         self._conn.commit()
         return cur.rowcount
 
-    def search(self, keyword: str, *, limit: int = 20, since_days: int | None = None) -> list[dict[str, Any]]:
+    def search(
+        self,
+        keyword: str,
+        *,
+        limit: int = 20,
+        since_days: int | None = None,
+        user_id: str | None = None,
+        user_name: str | None = None,
+    ) -> list[dict[str, Any]]:
         """在 text / repost_text 中 LIKE 搜索，按发帖时间降序返回。
 
         since_days: 若指定，仅返回 created_at 在最近 N 天内的帖子。
+        user_id / user_name: 若指定，仅返回该用户的帖子（精确匹配）。
         """
         pattern = f"%{keyword}%"
         params: list = [pattern, pattern]
-        date_clause = ""
+        extra_clauses: list[str] = []
         if since_days is not None and since_days > 0:
             cutoff = time.strftime(
                 "%Y-%m-%dT%H:%M:%S",
                 time.localtime(time.time() - since_days * 86400),
             )
-            date_clause = " AND created_at >= ?"
+            extra_clauses.append("created_at >= ?")
             params.append(cutoff)
+        if user_id:
+            extra_clauses.append("user_id = ?")
+            params.append(user_id)
+        if user_name:
+            extra_clauses.append("user_name = ?")
+            params.append(user_name)
+        extra = (" AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
         params.append(limit)
         rows = self._conn.execute(
             f"""SELECT * FROM posts
                WHERE (text LIKE ? OR repost_text LIKE ?)
-               {date_clause}
+               {extra}
                ORDER BY created_at DESC
                LIMIT ?""",
             params,
@@ -171,6 +193,42 @@ class FeedDatabase:
             "db_path": str(self._path),
             "retention_days": RETENTION_DAYS,
         }
+
+    def get_sync_log(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        """返回 per-user 同步日志，JOIN posts 取用户名，按最后同步时间降序。"""
+        rows = self._conn.execute(
+            """SELECT
+                   usl.user_id,
+                   MAX(p.user_name) AS user_name,
+                   usl.last_synced_at,
+                   usl.last_added,
+                   COUNT(p.id) AS post_count
+               FROM user_sync_log usl
+               LEFT JOIN posts p ON p.user_id = usl.user_id
+               GROUP BY usl.user_id
+               ORDER BY usl.last_synced_at DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_user_last_synced(self, user_id: str) -> str | None:
+        """返回该用户上次逐用户同步时间（ISO 格式），未同步过则返回 None。"""
+        row = self._conn.execute(
+            "SELECT last_synced_at FROM user_sync_log WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def upsert_user_sync_log(self, user_id: str, synced_at: str, added: int) -> None:
+        """更新或插入用户同步记录。"""
+        self._conn.execute(
+            """INSERT INTO user_sync_log (user_id, last_synced_at, last_added)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                 last_synced_at = excluded.last_synced_at,
+                 last_added = excluded.last_added""",
+            (user_id, synced_at, added),
+        )
 
     def total(self) -> int:
         """返回当前帖子总数。"""

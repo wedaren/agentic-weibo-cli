@@ -7,7 +7,7 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from .models import CommentItem, FollowItem, ListWeiboItem, PostWeiboResult, RepostItem, SyncResult, UserProfile, WeiboActionResult
+from .models import CommentItem, FollowItem, ListWeiboItem, PerUserSyncResult, PostWeiboResult, RepostItem, SyncResult, UserProfile, WeiboActionResult
 from .session import SessionStatus
 
 
@@ -56,7 +56,7 @@ def format_post_result(result: PostWeiboResult) -> str:
 
 def format_weibo_list(items: list[ListWeiboItem]) -> str:
     if not items:
-        return "未查询到微博记录。\n"
+        return "未查询到微博记录（API 返回空列表）。如需确认该用户是否有帖子，可尝试 `local list --uid <uid>` 查本地缓存，或 `user --uid <uid>` 查看其 statuses_count。\n"
     lines: list[str] = []
     for index, item in enumerate(items, start=1):
         lines.extend(_format_list_item(item, index))
@@ -272,6 +272,28 @@ def format_sync_result(result: SyncResult) -> str:
     return "\n".join(lines) + "\n"
 
 
+def format_per_user_sync_result(result: PerUserSyncResult) -> str:
+    """格式化逐用户同步结果。"""
+    notes = []
+    if result.users_skipped:
+        notes.append(f"跳过最近已同步 {result.users_skipped} 个")
+    if result.users_failed:
+        notes.append(f"失败 {result.users_failed} 个")
+    user_line = f"处理用户: {result.users_synced} 个"
+    if notes:
+        user_line += f"（{'，'.join(notes)}）"
+    lines = [
+        "逐用户同步完成",
+        user_line,
+        f"新增: {result.added} 条",
+        f"跳过（已存在）: {result.skipped} 条",
+        f"过期清理: {result.purged} 条",
+        f"数据库总计: {result.total} 条",
+        f"数据库路径: {result.db_path}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def format_local_stats(stats: dict[str, Any]) -> str:
     """格式化本地数据库统计信息。"""
     lines = [
@@ -288,12 +310,35 @@ def format_local_stats(stats: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_local_posts(rows: list[dict[str, Any]], *, keyword: str | None = None) -> str:
+def format_sync_log(rows: list[dict[str, Any]]) -> str:
+    """格式化 per-user 同步覆盖日志。"""
+    if not rows:
+        return "尚无逐用户同步记录。请先执行 `sync --per-user`。\n"
+    lines = [f"逐用户同步记录（共 {len(rows)} 位用户）："]
+    for i, row in enumerate(rows, 1):
+        name = row.get("user_name") or "未知用户"
+        uid = row.get("user_id") or ""
+        lines.append(f"[{i}] @{name}（{uid}）")
+        lines.append(f"    上次同步: {row.get('last_synced_at') or '—'}")
+        last_added = row.get("last_added")
+        post_count = row.get("post_count") or 0
+        stat = f"本次新增 {last_added} 条 | " if last_added is not None else ""
+        lines.append(f"    {stat}本地共 {post_count} 条")
+    return "\n".join(lines) + "\n"
+
+
+def format_local_posts(rows: list[dict[str, Any]], *, keyword: str | None = None, user_filter: str | None = None) -> str:
     """格式化本地数据库查询结果（含 synced_at）。"""
     if not rows:
         scope = f"「{keyword}」" if keyword else ""
-        return f"本地数据库中未找到{scope}相关微博。\n"
-    header = f"搜索「{keyword}」，共 {len(rows)} 条：" if keyword else f"共 {len(rows)} 条："
+        user_scope = f"（用户：{user_filter}）" if user_filter else ""
+        return f"本地数据库中未找到{scope}{user_scope}相关微博。\n"
+    header_parts = []
+    if keyword:
+        header_parts.append(f"搜索「{keyword}」")
+    if user_filter:
+        header_parts.append(f"用户：{user_filter}")
+    header = "，".join(header_parts) + f"，共 {len(rows)} 条：" if header_parts else f"共 {len(rows)} 条："
     lines = [header]
     for i, row in enumerate(rows, 1):
         lines.append(f"[{i}] {row['id']}")
@@ -335,8 +380,13 @@ def format_schedule_status(status: "Any") -> str:
         lines.append(f"状态: {'已启用' if status.loaded else '已配置但未加载'}")
         if status.hour is not None and status.minute is not None:
             lines.append(f"触发时间: 每天 {status.hour:02d}:{status.minute:02d}")
+        mode_label = "逐用户深度同步" if getattr(status, "mode", None) == "per_user" else "关注时间线"
+        lines.append(f"同步模式: {mode_label}")
         if status.pages is not None:
-            lines.append(f"同步页数: {status.pages} 页（约 {status.pages * 20} 条）")
+            pages_desc = "每用户拉取" if getattr(status, "mode", None) == "per_user" else "拉取"
+            lines.append(f"同步页数: {pages_desc} {status.pages} 页")
+        if getattr(status, "retention_days", None) is not None:
+            lines.append(f"数据保留: {status.retention_days} 天")
         lines.append(f"日志路径: {status.log_path}")
         if not status.loaded:
             lines.append("操作: 执行 `schedule set` 重新加载，或 `schedule off` 清除配置")

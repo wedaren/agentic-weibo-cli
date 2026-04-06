@@ -78,13 +78,20 @@ scripts/weibo-cli <subcommand> [...args]
 - 仅在关注用户中搜索微博：`scripts/weibo-cli search --keyword <关键词> --following-only`
 - 同步关注时间线到本地数据库：`scripts/weibo-cli sync`（默认 5 页 ≈ 100 条）
 - 同步更多页以获取更广历史覆盖：`scripts/weibo-cli sync --pages 10`
+- 逐用户全量同步（深度抓取，带随机延迟）：`scripts/weibo-cli sync --per-user`
+- 逐用户同步（指定每人页数，跳过 12 小时内已同步用户）：`scripts/weibo-cli sync --per-user --pages-per-user 5 --skip-hours 12`
+- 逐用户同步（强制重新同步所有用户）：`scripts/weibo-cli sync --per-user --force`
 - 在本地数据库中搜索：`scripts/weibo-cli local search --keyword <关键词>`
 - 在本地数据库中搜索（限最近 N 天）：`scripts/weibo-cli local search --keyword <关键词> --days 7`
+- 在本地数据库中搜索（限定用户 UID）：`scripts/weibo-cli local search --keyword <关键词> --uid <UID>`
+- 在本地数据库中搜索（限定用户昵称）：`scripts/weibo-cli local search --keyword <关键词> --user-name <昵称>`
 - 列出本地缓存帖子：`scripts/weibo-cli local list`
 - 本地数据库统计：`scripts/weibo-cli local stats`
+- 查看逐用户同步覆盖日志：`scripts/weibo-cli local sync-log`
 - 查看定时同步策略状态：`scripts/weibo-cli schedule`
-- 启用每日定时 sync（默认 08:07，10 页）：`scripts/weibo-cli schedule set`
-- 指定时间和页数：`scripts/weibo-cli schedule set --hour 8 --minute 30 --pages 10`
+- 启用每日定时 sync（默认 08:07，时间线模式，10 页）：`scripts/weibo-cli schedule set`
+- 指定时间、页数和保留天数：`scripts/weibo-cli schedule set --hour 8 --minute 30 --pages 10 --retention-days 30`
+- 启用逐用户深度同步定时任务：`scripts/weibo-cli schedule set --mode per-user --pages-per-user 5 --retention-days 30`
 - 停用并删除定时策略：`scripts/weibo-cli schedule off`
 
 说明：面向最终用户的对话回复默认仍优先使用文本格式；只有在需要稳定字段时才切到 `--json`。
@@ -100,7 +107,7 @@ scripts/weibo-cli <subcommand> [...args]
 1. 用户未确认最终文本时，不要执行 `post`。
 2. 缺少 `weibo-id` 时，不要执行 `reposts`，先向用户索取明确 ID。
 3. 缺少 `weibo-id` 时，不要执行 `show`、`comments`、`comment`、`like`、`unlike`、`delete`，先向用户索取明确 ID。
-4. 默认先用 `status` 检查登录态；只有缺失或失效时，再执行 `login`。命令因鉴权失败退出（`--json` 模式下 `error.category == “auth”` 且 `error.next_action == “login”`）时，执行 `login`（**不要** `login --force`）后立即重试原命令。
+4. 执行任何业务命令前**不要**先调用 `status`；直接执行目标命令，若失败且 `--json` 输出的 `error.category == “auth”`（或 `error.next_action == “login”`），立即执行 `login`（**不要** `login --force`）并重试原命令，不需要额外确认。
 5. 对查看、读取、列举这类非破坏性任务，如果登录态失效，应直接继续执行 `login` 并在登录成功后回到原任务，不要额外停下来征求一次”是否现在执行”的确认。
 6. 本地登录态仍有效时，不要重复执行 `login`；如确需刷新，显式使用 `login --force`。
 7. 删除微博前必须确认用户已经明确要求删除，且目标微博 ID 无歧义。
@@ -119,13 +126,22 @@ scripts/weibo-cli <subcommand> [...args]
 20. 用户用简短词（"好的"、"是"、"行"、"ok"、"嗯"）回复上一轮提出的操作建议时，直接执行其中**最有价值**的那个操作，不要再次列出选项或征求选择。
 21. 用户询问"有没有开定时同步""定时任务状态""有没有每天自动 sync"时，先执行 `schedule` 查看当前策略，再根据结果给出建议。
 22. `schedule` 仅在 macOS 下可用（依赖 launchctl）；在非 macOS 环境下执行会报错，告知用户该功能暂不支持当前系统。
+23. `sync --per-user` 会遍历全部关注者并逐一抓取其微博（每人 3 页默认），请求间随机延迟 1–3 秒，跳过 6 小时内已同步的用户；适合用于：（a）建立初始全量本地索引、（b）定期深度补抓时间线遗漏的帖子。关注数较多时可能运行 10 分钟以上，告知用户预计耗时。`--force` 可跳过 skip-hours 限制强制重新同步所有人。
+24. 用户想查"某个关注的人最近发了什么关于 X 的微博"时，使用 `local search --keyword X --uid <UID>` 或 `--user-name <昵称>`；不知道 UID 时，先用 `following` 找到对应用户的 UID。
+25. 用户询问"per-user 同步了哪些用户""哪些关注的人被同步了"时，执行 `local sync-log` 查看覆盖情况。
+26. `--retention-days` 控制本地数据库保留天数（默认 7）；想保留更长历史时，在 sync 命令或 schedule set 中指定，例如 `--retention-days 30`。
+27. `list --uid <uid>` 返回空 `items`（exit 0）时，**不要**直接得出"该用户没有发帖"的结论；应立即补一步 `local list --uid <uid> --limit 20` 确认本地缓存。若本地也为空，再用 `user --uid <uid>` 查 `statuses_count`：若该值 > 0 说明用户确有发帖但当前 API 无法返回（隐私设置或接口限制），告知用户并建议执行 `sync --per-user --force` 深度抓取。
+28. 查看某位关注用户的最近动态时，**先查本地缓存**（`local list --uid <uid> --limit 20`）；若本地有数据且 `synced_at` 在 2 小时内，直接用本地结果回复；只有本地无数据或数据明显过旧时，再发起 `list --uid` 网络请求。
+29. `sync` 或任何网络请求失败后，本地数据仍然可用——不要因为 `sync` 失败就放弃整个查询；`local search/list` 完全离线运行，在网络或 API 出现问题时应作为首选回退。
+30. 命令路径统一使用 `scripts/weibo-cli`（相对于 skill 目录），不要用 `./scripts/weibo-cli` 或绝对路径。
+
 ## 完成前检查
 
 - `status` 成功时，应看到“已配置 / 可直接使用 / 来源 / UID / 更新时间”等状态信息。
 - `login` 成功时，终端应出现“登录态已写入”并输出 UID。
 - `post` 成功时，终端应出现“发布成功”并返回微博 ID。
 - `show` 成功时，应看到微博 ID、正文、作者和互动计数。
-- `list` 成功时，输出应包含微博 ID 和正文；若是转发微博，还应看到原微博内容；`list --uid <UID>` 可查看任意用户的最近微博。
+- `list` 成功时，输出应包含微博 ID 和正文；若是转发微博，还应看到原微博内容；`list --uid <UID>` 可查看任意用户的最近微博。若输出"未查询到微博记录（API 返回空列表）"，需进一步执行 `local list --uid` 和 `user --uid` 验证，不能直接认定用户无帖子。
 - `comments` 成功时，输出应包含评论用户、时间和正文；若无结果，应明确说明没有可返回的评论记录。
 - `comment` 成功时，终端应出现“评论成功”并返回评论 ID。
 - `like` / `unlike` / `delete` 成功时，应返回目标微博 ID 和操作结果说明。
@@ -134,6 +150,9 @@ scripts/weibo-cli <subcommand> [...args]
 - `following` / `followers` 成功时，应看到带编号的用户列表（昵称、UID、粉丝数等）；`--all-pages` 时还应看到合计条数；若 `items` 为空列表（exit 0），告知用户"未能获取到关注/粉丝列表，该功能可能处于不可用状态"，并报告给开发者。
 - `search` 成功时，应看到带编号的微博列表（微博 ID、作者、互动计数、正文）；若无结果，应明确说明未找到相关微博。
 - `sync` 成功时，应看到新增条数、跳过条数、过期清理条数、数据库总计及路径。
+- `sync --per-user` 成功时，应看到"逐用户同步完成"、处理用户数（含跳过/失败）、新增条数及数据库总计。
+- `local search --uid/--user-name` 成功时，输出标题应包含"用户：<过滤条件>"。
+- `local sync-log` 成功时，应看到带编号的用户列表（昵称、UID、上次同步时间、新增条数、本地总条数）；若无记录，说明尚未执行过 `sync --per-user`。
 - `schedule` 成功时，应看到"状态（已启用/未配置）"、触发时间、同步页数、日志路径等信息。
 - `schedule set` 成功时，状态应显示"已启用"，并确认触发时间和页数。
 - `schedule off` 成功时，应看到"定时同步策略已停用并删除"并确认状态变为"未配置"。

@@ -102,3 +102,16 @@ class SyncResult:
     total: int           # 同步后数据库总条数
     pages_fetched: int   # 实际请求页数
     db_path: str         # 数据库路径
+
+
+@dataclass(slots=True)
+class PerUserSyncResult:
+    """逐用户增量同步结果。"""
+    added: int            # 本次新增条数
+    skipped: int          # 已存在跳过条数
+    purged: int           # 过期清理条数
+    total: int            # 同步后数据库总条数
+    users_synced: int     # 实际抓取的用户数
+    users_skipped: int    # 因最近已同步而跳过的用户数
+    users_failed: int     # 抓取失败的用户数
+    db_path: str          # 数据库路径
